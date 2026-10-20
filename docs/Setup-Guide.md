@@ -213,6 +213,8 @@ From now on, each time you get a key: paste it after the `=` on the matching lin
 
 ## Part 5. Pexels API key (10 min)
 
+> **Skip for now (Oct 20, 2026):** Pexels has paused new API keys. Pixabay (Part 6) covers stock footage on its own, and `npm run check` treats Pexels as optional. Come back to this part if Pexels reopens.
+
 - [ ] 1. Go to [pexels.com](https://www.pexels.com) and click **Join**.
 - [ ] 2. Sign up with your personal email and confirm it.
 - [ ] 3. Go to [pexels.com/api](https://www.pexels.com/api/).
@@ -455,7 +457,7 @@ Useful later: `docker stop n8n` stops it, `docker start n8n` starts it again. Yo
 
 ## Part 12. Final check (5 min)
 
-- [ ] 1. Open `.env` in VS Code. Confirm all 7 lines have a value after `=`.
+- [ ] 1. Run `npm run check`. Every line should show ✓ (Pexels may show – as skipped).
 - [ ] 2. Run `git status` in `~/video-pipeline` once more. Confirm `.env` is not listed.
 - [ ] 3. Confirm Docker Desktop is running and [localhost:5678](http://localhost:5678) opens n8n.
 - [ ] 4. Confirm your Notion **Videos** table has 10 ideas and the `n8n` connection.

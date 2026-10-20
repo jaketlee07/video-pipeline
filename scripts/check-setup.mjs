@@ -6,6 +6,9 @@ import { loadEnv } from "./env.mjs";
 const NOTION_VERSION = "2026-03-11";
 const env = loadEnv();
 
+// Thrown by checks for optional services that aren't set up; not counted as a failure.
+class Skipped extends Error {}
+
 function need(...keys) {
   const missing = keys.filter((key) => !env[key]);
   if (missing.length) throw new Error(`fill in ${missing.join(", ")} in .env`);
@@ -35,7 +38,8 @@ const notionHeaders = () => ({
 
 const checks = {
   async Pexels() {
-    need("PEXELS_API_KEY");
+    // Optional: Pexels paused new API keys (Oct 2026). Pixabay covers stock on its own.
+    if (!env.PEXELS_API_KEY) throw new Skipped("optional, skipped (Pexels has paused new API keys)");
     const { res, json } = await request("https://api.pexels.com/videos/search?query=highway&per_page=1", {
       headers: { Authorization: env.PEXELS_API_KEY },
     });
@@ -116,14 +120,15 @@ const results = await Promise.all(
     try {
       return { name, ok: true, message: await check() };
     } catch (err) {
-      return { name, ok: false, message: err.message };
+      return { name, ok: false, skipped: err instanceof Skipped, message: err.message };
     }
   }),
 );
 
-for (const { name, ok, message } of results) {
-  console.log(`${ok ? "✓" : "✗"} ${name.padEnd(11)} ${message}`);
+for (const { name, ok, skipped, message } of results) {
+  console.log(`${ok ? "✓" : skipped ? "–" : "✗"} ${name.padEnd(11)} ${message}`);
 }
-const failed = results.filter((r) => !r.ok).length;
-console.log(failed ? `\n${failed} of ${results.length} not ready yet.` : "\nEverything checks out. Setup done.");
+const required = results.filter((r) => !r.skipped);
+const failed = required.filter((r) => !r.ok).length;
+console.log(failed ? `\n${failed} of ${required.length} not ready yet.` : "\nEverything checks out. Setup done.");
 process.exitCode = failed ? 1 : 0;
