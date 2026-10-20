@@ -1,0 +1,22 @@
+# n8n, the pipeline glue (Setup Guide Part 10).
+# Start: npm run n8n:up   Stop: npm run n8n:down   Then open http://localhost:5678
+# Workflows and credentials live in the n8n_data volume and survive restarts.
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=America/Chicago
+      - TZ=America/Chicago
+      # n8n reads and writes voiceovers and clips only inside /files (= ./media on this Mac).
+      - N8N_RESTRICT_FILE_ACCESS_TO=/files
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./media:/files
+
+volumes:
+  n8n_data:
+    name: n8n_data

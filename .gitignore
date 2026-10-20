@@ -1,0 +1,21 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+
+# Generated media: voiceovers, stock clips, renders (large, regenerable)
+media/
+out/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# Personal planning docs (mention employer): keep local only
+docs/Setup-Guide.md
+docs/YouTube-Automation-Guide-Book.md

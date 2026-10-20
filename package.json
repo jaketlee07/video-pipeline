@@ -1,0 +1,15 @@
+{
+  "name": "video-pipeline",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "node scripts/check-setup.mjs",
+    "notion:setup": "node scripts/setup-notion.mjs",
+    "n8n:up": "docker compose up -d",
+    "n8n:down": "docker compose down",
+    "n8n:logs": "docker compose logs -f n8n"
+  }
+}
