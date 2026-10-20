@@ -15,7 +15,3 @@ npm-debug.log*
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
-
-# Personal planning docs (mention employer): keep local only
-docs/Setup-Guide.md
-docs/YouTube-Automation-Guide-Book.md

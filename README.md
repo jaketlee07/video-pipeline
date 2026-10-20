@@ -1,7 +1,8 @@
 # video-pipeline
 
 Automation for a faceless YouTube channel on the hidden economics of everyday things.
-The plan and setup checklist live in `docs/` on the local machine only (not committed).
+Plan: [docs/YouTube-Automation-Guide-Book.md](docs/YouTube-Automation-Guide-Book.md).
+Setup checklist: [docs/Setup-Guide.md](docs/Setup-Guide.md).
 
 ## Commands
 
@@ -19,4 +20,4 @@ No `npm install` needed yet; the scripts use only built-in Node (22+).
 - `.env`: your keys (gitignored). Template: `.env.example`.
 - `media/`: voiceovers, stock clips and renders. Gitignored, and mounted into n8n at `/files`.
 - `scripts/`: setup helpers.
-- `docs/`: the plan and the setup guide (gitignored).
+- `docs/`: the plan and the setup guide.
