@@ -1,0 +1,32 @@
+Plan the visuals for this video, scene by scene.
+
+Title: {{title}}
+
+The narration below is split into numbered sentences, grouped under their script parts, with each sentence's word count. The narrator reads about 150 words a minute, so 20 to 30 words take 8 to 12 seconds.
+
+Group consecutive sentences into scenes so that:
+- every sentence belongs to exactly one scene, in order, from sentence 1 through sentence {{count}}
+- a new visual appears every 8 to 12 seconds (one long sentence can be its own scene, but never split a sentence)
+- across the whole video, the mix is roughly 40% motion graphics (chart, number, map and title), 35% stock footage, 15% aerials of real places and 10% real branded imagery
+
+## Scene types
+
+- stock: b-roll footage from Pixabay
+- chart: an animated bar or line chart. Use only data that appears in the brief, with the values and source exactly as given there. If the data isn't in the brief, pick another type.
+- number: one big number with a short label, for a stat the narration lands on
+- map: a real place highlighted on a map
+- aerial: a Google Earth flyover of a real place, which Jake renders himself
+- title: a short text card for a section opener or a key line
+- image: real imagery of a company, store or person, sourced later from press kits or Wikimedia Commons. Never ask for AI-generated imagery of real brands or people.
+
+For every scene, also give two or three Pixabay search queries as fallback b-roll. Make them short, concrete and visual (like "empty parking lot" or "small town main street"), not abstract ideas (like "economic decline").
+
+## The brief, for data and sources
+
+<brief>
+{{brief}}
+</brief>
+
+## The narration
+
+{{sentences}}

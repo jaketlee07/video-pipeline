@@ -8,8 +8,14 @@
   "scripts": {
     "check": "node scripts/check-setup.mjs",
     "notion:setup": "node scripts/setup-notion.mjs",
+    "draft": "node src/draft.mjs",
+    "scenes": "node src/scenes.mjs",
     "n8n:up": "docker compose up -d",
     "n8n:down": "docker compose down",
     "n8n:logs": "docker compose logs -f n8n"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.136.0",
+    "zod": "^4.6.7"
   }
 }

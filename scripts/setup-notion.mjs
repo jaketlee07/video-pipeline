@@ -3,7 +3,7 @@
 //
 // Before running: put NOTION_TOKEN and NOTION_PARENT_PAGE_ID (the page link is fine)
 // in .env, and connect the n8n integration to that page (••• → Connections → n8n).
-import { loadEnv, setEnvValue } from "./env.mjs";
+import { loadEnv, setEnvValue } from "../src/env.mjs";
 
 const NOTION_VERSION = "2026-03-11";
 

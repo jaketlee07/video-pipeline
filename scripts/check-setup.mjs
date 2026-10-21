@@ -1,7 +1,7 @@
 // Final check (Setup Guide Part 12). Tests each key in .env with one cheap,
 // read-only request per service, then checks n8n and git. Never prints a key.
 import { execFileSync } from "node:child_process";
-import { loadEnv } from "./env.mjs";
+import { loadEnv } from "../src/env.mjs";
 
 const NOTION_VERSION = "2026-03-11";
 const env = loadEnv();
