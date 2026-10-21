@@ -41,7 +41,7 @@ const ABBREVIATION = /\b(?:Mr|Mrs|Ms|Dr|St|Jr|Sr|vs|Inc|Co|Corp|Ltd|Mt|Ft|No|[A-
 export function splitSentences(paragraphs) {
   const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
   const sentences = [];
-  for (const { part, text } of paragraphs) {
+  for (const [paragraph, { part, text }] of paragraphs.entries()) {
     const pieces = [];
     for (const { segment } of segmenter.segment(text)) {
       const piece = segment.trim();
@@ -50,7 +50,7 @@ export function splitSentences(paragraphs) {
       else pieces.push(piece);
     }
     for (const sentence of pieces) {
-      sentences.push({ id: sentences.length + 1, part, text: sentence, words: wordCount(sentence) });
+      sentences.push({ id: sentences.length + 1, part, paragraph, text: sentence, words: wordCount(sentence) });
     }
   }
   return sentences;
