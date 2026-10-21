@@ -11,6 +11,7 @@
     "draft": "node src/draft.mjs",
     "scenes": "node src/scenes.mjs",
     "voice": "node src/voice.mjs",
+    "footage": "node src/footage.mjs",
     "n8n:up": "docker compose up -d",
     "n8n:down": "docker compose down",
     "n8n:logs": "docker compose logs -f n8n"

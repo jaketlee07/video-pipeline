@@ -41,6 +41,24 @@ const decode = (file) =>
   });
 const silence = (seconds) => Buffer.alloc(Math.round(seconds * SAMPLE_RATE) * 2);
 
+// 16-bit mono PCM as a WAV file.
+function wav(pcm) {
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(1, 22); // mono
+  header.writeUInt32LE(SAMPLE_RATE, 24);
+  header.writeUInt32LE(SAMPLE_RATE * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
 async function main() {
   const video = await findVideo(query, "Approved");
   if (video.status !== "Approved" && !force) {
@@ -141,10 +159,7 @@ async function main() {
   }
   const duration = round(time);
   const outName = sample ? "sample.wav" : "narration.wav";
-  execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "s16le", "-ar", String(SAMPLE_RATE), "-ac", "1", "-i", "-", join(dir, outName)], {
-    input: Buffer.concat(audio),
-    maxBuffer: 1 << 30,
-  });
+  writeFileSync(join(dir, outName), wav(Buffer.concat(audio)));
 
   if (sample) {
     console.log(`\nSample: media/${video.slug}/sample.wav (${clock(duration)}). ElevenLabs credits used: ${credits.toLocaleString("en-US")}`);

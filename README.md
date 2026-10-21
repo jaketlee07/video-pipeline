@@ -11,6 +11,7 @@ Setup checklist: [docs/Setup-Guide.md](docs/Setup-Guide.md).
 | `npm run draft` | For the row set to **Go**: Claude researches a sourced brief and writes the script into its Notion page, then sets it to **Script Ready**. |
 | `npm run scenes` | For the row set to **Approved**: turns the script into `media/<video>/scenes.json` (one visual per 8–12 s) plus `narration.txt`. Refuses if `[bracketed notes]` are left in the narration. |
 | `npm run voice` | For the **Approved** row with scenes: the narrator reads `narration.txt` (ElevenLabs, one paragraph per request) into `media/<video>/narration.wav`, plus `timing.json` with when every scene, sentence and word starts. Add `--sample` to voice just the first three paragraphs. Needs a paid ElevenLabs plan for a library voice. |
+| `npm run footage` | For the **Approved** row with scenes: for each stock, image and aerial scene, gathers Pixabay videos and photos and Wikimedia Commons photos of the real places named, has Claude pick the best from a still of each, and downloads it to `media/<video>/footage/`. Scenes where nothing fits get a graphic. `footage.json` keeps the runners-up and the photo credits the description needs. |
 | `npm run check` | Tests every key in `.env` and checks n8n and git. Never prints keys. |
 | `npm run notion:setup` | Creates the Notion **Videos** table with the first 10 ideas and saves its IDs to `.env`. |
 | `npm run n8n:up` / `n8n:down` | Starts or stops n8n at http://localhost:5678 (Docker Desktop must be open). |

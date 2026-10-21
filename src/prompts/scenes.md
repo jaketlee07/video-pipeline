@@ -15,11 +15,11 @@ Group consecutive sentences into scenes so that:
 - chart: an animated bar or line chart. Use only data that appears in the brief, with the values and source exactly as given there. If the data isn't in the brief, pick another type.
 - number: one big number with a short label, for a stat the narration lands on
 - map: a real place highlighted on a map
-- aerial: a Google Earth flyover of a real place, which Jake renders himself
+- aerial: a real place, shown with a photo of it from Wikimedia Commons when one exists, otherwise a map zooming in on it
 - title: a short text card for a section opener, a key line, or the question when the narrator asks viewers to comment
 - image: real imagery of a company, store or person, sourced later from press kits or Wikimedia Commons. Never ask for AI-generated imagery of real brands or people.
 
-For every scene, also give two or three Pixabay search queries as fallback b-roll. Make them short, concrete and visual (like "empty parking lot" or "small town main street"), not abstract ideas (like "economic decline").
+For every scene, also give two or three Pixabay search queries as fallback b-roll. Pixabay matches the words against the tags uploaders give their clips, so make each one or two common words naming something stock videographers often film (like "parking lot", "shopping cart" or "main street"), not detailed descriptions (like "weeds in cracked parking lot") or abstract ideas (like "economic decline").
 
 ## The brief, for data and sources
 
