@@ -20,7 +20,7 @@ Run `npm install` once after cloning (Node 22+).
 ## How a video moves
 
 1. Set a row's Status to **Go** in Notion → `npm run draft`.
-2. On the row's page, fact-check the brief's key numbers, read the script, edit anything → set **Approved** (checkpoint 1). The 💬 notes mark optional spots for your own take: type a line under one, or ignore it. Notes (`>` lines) are never read aloud.
+2. On the row's page, fact-check the brief's key numbers, read the script, edit anything → set **Approved** (checkpoint 1). The script asks viewers one question to answer in the comments, and the **Pinned comment** section at the end holds the comment to pin under the video; edit either as you like. Notes (`>` lines) are never read aloud.
    - Fixed a fact in the brief? `npm run draft -- "<title words>" --script-only` rewrites just the script from it (about $0.30).
 3. `npm run scenes`. It first tidies any lines you changed or added (typos, shorthand, symbols) and updates them on the Notion page, printing a before/after for each, then plans the scenes.
 

@@ -16,7 +16,7 @@ Group consecutive sentences into scenes so that:
 - number: one big number with a short label, for a stat the narration lands on
 - map: a real place highlighted on a map
 - aerial: a Google Earth flyover of a real place, which Jake renders himself
-- title: a short text card for a section opener or a key line
+- title: a short text card for a section opener, a key line, or the question when the narrator asks viewers to comment
 - image: real imagery of a company, store or person, sourced later from press kits or Wikimedia Commons. Never ask for AI-generated imagery of real brands or people.
 
 For every scene, also give two or three Pixabay search queries as fallback b-roll. Make them short, concrete and visual (like "empty parking lot" or "small town main street"), not abstract ideas (like "economic decline").

@@ -22,7 +22,7 @@ const query = args.filter((a) => !a.startsWith("--")).join(" ") || undefined;
 const demoteHeadings = (markdown) => markdown.replace(/^#{1,2}\s/gm, "### ");
 
 const CHECKPOINT_NOTE =
-  "> Checkpoint 1: fact-check the numbers in the brief's Fact-check list and read the script through, editing anything you like. Each 💬 note marks an optional spot for your own take: type a line under it, or ignore it. Then set Status to Approved.";
+  "> Checkpoint 1: fact-check the numbers in the brief's Fact-check list and read the script through, editing anything you like, including the question for viewers and the pinned comment at the end. Then set Status to Approved.";
 
 // --script-only replaces the Script section, so refuse if it was edited after drafting.
 function assertScriptUnedited(dir, markdown) {
@@ -71,16 +71,19 @@ async function main() {
     console.log("\n2/2 Writing the script...");
   }
 
-  const script = demoteHeadings(
-    extractTag(await ask({ label: "script", system, user: prompt("script", { ...vars, brief }) }), "script"),
-  );
+  const reply = await ask({ label: "script", system, user: prompt("script", { ...vars, brief }) });
+  const script = demoteHeadings(extractTag(reply, "script"));
+  const pinned = reply.includes("</pinned_comment>") ? extractTag(reply, "pinned_comment") : "";
   writeFileSync(join(dir, "script-draft.md"), `${script}\n`);
-  await setMarkdown(video.id, ["## Brief", brief, "## Script", CHECKPOINT_NOTE, script].join("\n\n"));
+  await setMarkdown(
+    video.id,
+    ["## Brief", brief, "## Script", CHECKPOINT_NOTE, script, ...(pinned ? ["## Pinned comment", pinned] : [])].join("\n\n"),
+  );
 
   const paragraphs = parseScript(script);
   const words = paragraphs.reduce((sum, p) => sum + wordCount(p.text), 0);
   const minutes = words / WORDS_PER_SECOND / 60;
-  const takes = (script.match(/^> 💬/gm) ?? []).length;
+  const viewerQuestion = paragraphs.find((p) => /\bcomments\b/i.test(p.text));
   const sources = [...new Set(brief.match(/https?:\/\/[^\s)\]>"]+/g) ?? [])];
   const angle = brief.match(/\*\*Angle:\*\*\s*(.+)/)?.[1].trim() ?? "";
 
@@ -96,7 +99,8 @@ async function main() {
   console.log(`
 Done: "${video.title}" is now Script Ready.
   Script: ${words.toLocaleString("en-US")} words, about ${minutes.toFixed(1)} minutes
-  Optional take spots: ${takes}
+  Question for viewers: ${viewerQuestion ? viewerQuestion.text : "none found; add one on the page if you want it"}
+  Pinned comment: ${pinned ? "at the end of the page" : "none written; add one on the page if you want it"}
   Sources: ${sources.length}
   Claude cost: about $${totalSpent().toFixed(2)}
   Open it: ${video.url}`);
