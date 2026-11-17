@@ -1,5 +1,6 @@
-// ElevenLabs text to speech for the narrator. The API key only needs the Text to
-// Speech and Voices (read) permissions.
+// ElevenLabs: text to speech for the narrator, and music for the library in
+// media/music/. The API key needs the Text to Speech, Voices (read) and Music
+// permissions.
 import { loadEnv } from "./env.mjs";
 
 export const VOICE_MODEL = "eleven_v4";
@@ -37,4 +38,25 @@ export async function speak({ text, previousText, nextText, previousRequestIds =
     requestId: res.headers.get("request-id"),
     credits: Number(res.headers.get("character-cost")) || text.length,
   };
+}
+
+export const MUSIC_MODEL = "music_v2_5";
+
+/**
+ * Composes an instrumental track from a description. Returns the MP3 and
+ * ElevenLabs' ID for the song.
+ */
+export async function compose({ prompt, seconds }) {
+  const res = await fetch("https://api.elevenlabs.io/v1/music?output_format=mp3_44100_192", {
+    method: "POST",
+    headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, music_length_ms: Math.round(seconds * 1000), model_id: MUSIC_MODEL, force_instrumental: true }),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => null);
+    const detail = json?.detail;
+    const message = typeof detail === "string" ? detail : (detail?.message ?? JSON.stringify(json));
+    throw new Error(`ElevenLabs ${res.status}${detail?.status ? ` (${detail.status})` : ""}: ${message}`);
+  }
+  return { audio: Buffer.from(await res.arrayBuffer()), songId: res.headers.get("song-id") };
 }

@@ -1,9 +1,13 @@
-// Footage (guide stages 6 and 7): for every stock, image and aerial scene, gathers
-// candidates from Pixabay (videos and photos) and Wikimedia Commons (real photos of
-// the places and companies named), has Claude pick the best from a still of each,
-// and downloads the pick to media/<slug>/footage/. Photos get a slow pan and zoom in
-// the render. footage.json lists each pick with its runners-up, plus the credits
-// for the video description. Scenes where nothing fits get a graphic instead.
+// Footage (guide stages 6 and 7): for every stock and image scene, gathers
+// candidates from Pixabay (videos and photos), Wikimedia Commons (real videos and
+// photos of the places and companies named) and, for scenes about the past, the
+// Internet Archive (public-domain old film), has Claude pick the best from a still
+// of each (a sheet of numbered stills for a Commons or Archive video, one per
+// uninterrupted stretch), and downloads the pick to media/<slug>/footage/. Photos
+// get a slow pan and zoom in the render. Aerial scenes fly down onto the real place
+// using US aerial imagery (src/aerial.mjs), and look for a photo only if the place
+// can't be found. footage.json lists each pick with its runners-up, plus the
+// credits for the video description. Scenes where nothing fits get a graphic instead.
 //
 //   npm run footage                     the row with Status "Approved"
 //   npm run footage -- walmart          the row with "walmart" in its title
@@ -12,16 +16,19 @@
 // alternates into its "pick" and run this again; to re-pick from scratch, delete the
 // scene's entry.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { ask, prompt, totalSpent } from "./claude.mjs";
-import { USER_AGENT, photoURL, searchCommons } from "./commons.mjs";
-import { findVideo } from "./notion.mjs";
+import { prepareAerials } from "./aerial.mjs";
+import { searchArchive } from "./archive.mjs";
+import { agentFor, photoURL, searchCommons, searchCommonsVideos } from "./commons.mjs";
+import { APPROVED, findVideo } from "./notion.mjs";
 import { videoDir } from "./paths.mjs";
 import { rendition, searchPhotos, searchVideos, tagScore } from "./pixabay.mjs";
+import { downloadStretch, shotSheet } from "./shots.mjs";
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");
@@ -30,7 +37,9 @@ const query = args.filter((a) => !a.startsWith("--")).join(" ") || undefined;
 const FOOTAGE_TYPES = ["stock", "image", "aerial"];
 // Most candidates per scene from each source. Aerial scenes only use Commons: stock
 // drone shots can't show the actual place.
-const PER_SCENE = { video: 4, pixabayPhoto: 2, commons: 3, aerialCommons: 5 };
+const PER_SCENE = { video: 4, commonsVideo: 2, archive: 2, pixabayPhoto: 2, commons: 3, aerialCommons: 5 };
+// An Archive film runs ten to twenty minutes, so its sheet samples more of it.
+const ARCHIVE_STILLS = 12;
 const PER_QUERY = 2;
 const PER_UPLOADER = 2;
 const MIN_TAG_SCORE = 0.5;
@@ -40,7 +49,13 @@ const MIN_LENGTH_SHARE = 0.75;
 const SYSTEM = "You choose footage for a faceless YouTube channel about the hidden economics of everyday things.";
 
 const Picks = z.object({
-  picks: z.array(z.object({ scene: z.number().int(), candidate: z.number().int().describe("Candidate number, or 0 if none fit") })),
+  picks: z.array(
+    z.object({
+      scene: z.number().int(),
+      candidate: z.number().int().describe("Candidate number, or 0 if none fit"),
+      shot: z.number().int().describe("For a video shown as numbered stills, the number of the still to use; otherwise 0"),
+    }),
+  ),
 });
 const Searches = z.object({ scenes: z.array(z.object({ scene: z.number().int(), queries: z.array(z.string()) })) });
 
@@ -54,7 +69,7 @@ async function inGroups(items, size, fn) {
 // can deadlock.
 let stills = 0;
 async function still(url) {
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } }).catch(() => null);
+  const res = await fetch(url, { headers: { "User-Agent": agentFor(url) } }).catch(() => null);
   if (!res?.ok) return null;
   const source = join(tmpdir(), `video-pipeline-still-${process.pid}-${stills++}`);
   writeFileSync(source, Buffer.from(await res.arrayBuffer()));
@@ -69,6 +84,34 @@ async function still(url) {
 }
 
 const sceneKey = (scene) => JSON.stringify([scene.visual, scene.search]);
+
+// Candidates the picker let through despite its rules, filtered out before it sees
+// them: clips tagged as horror, clips tagged with a place outside the US (unless the
+// scene is about that place), and scanned maps or records offered as a photo of a place.
+const OFF_TONE = ["horror", "halloween", "scary", "spooky", "creepy", "zombie", "ghost", "haunted", "blood", "monster", "nightmare", "demon", "skull"];
+const ABROAD = [
+  "europe", "european", "germany", "deutschland", "berlin", "munich", "hamburg", "frankfurt", "cologne", "düsseldorf", "france", "paris",
+  "italy", "rome", "spain", "madrid", "barcelona", "portugal", "lisbon", "england", "london", "britain", "uk", "scotland", "ireland",
+  "dublin", "netherlands", "amsterdam", "belgium", "brussels", "austria", "vienna", "switzerland", "zurich", "poland", "warsaw", "czech",
+  "prague", "hungary", "budapest", "croatia", "bosnia", "sarajevo", "serbia", "romania", "bulgaria", "greece", "athens", "istanbul",
+  "russia", "moscow", "ukraine", "kyiv", "sweden", "stockholm", "norway", "oslo", "denmark", "copenhagen", "finland", "helsinki",
+  "iceland", "india", "mumbai", "delhi", "beijing", "shanghai", "hong kong", "japan", "tokyo", "korea", "seoul", "vietnam", "thailand",
+  "bangkok", "indonesia", "bali", "philippines", "malaysia", "singapore", "australia", "sydney", "melbourne", "new zealand", "brazil",
+  "argentina", "mexico", "canada", "ontario", "quebec", "alberta", "british columbia", "toronto", "vancouver", "montreal", "africa", "nigeria", "kenya", "egypt", "cairo", "morocco",
+  "dubai", "israel", "iran", "isfahan", "tehran", "iraq", "baghdad", "najaf", "pakistan", "bangladesh", "nepal",
+];
+// Commons videos that are never the footage this channel wants: police bodycams and
+// chases, trailers, product reviews and sit-down interviews.
+const VIDEO_JUNK = /\b(bodycam|body cam|dashcam|shooting|shoots?|police|sheriff|deputy|officers?|suspect|pursuit|chase|pit maneuver|arrest|busted|stealing|trailer|review|interview|endorses|gameplay)\b/i;
+const MAPLIKE = /\b(maps?|census|plat|survey|enumeration|diagram|blueprint|floor plan|site plan|locator)\b/i;
+function allowed(scene, text, kind) {
+  const about = `${scene.narration} ${scene.place ?? ""} ${scene.visual}`.toLowerCase();
+  // US places that contain a foreign name.
+  const t = text.toLowerCase().replace(/\bnew (mexico|england|london|york|jersey|hampshire|orleans)\b/g, "");
+  const named = (word) => new RegExp(`(^|[^\\p{L}])${word}($|[^\\p{L}])`, "u").test(t) && !about.includes(word);
+  if (OFF_TONE.some(named) || ABROAD.some(named)) return false;
+  return kind !== "commons" || !MAPLIKE.test(text) || (scene.type !== "aerial" && /\bmap\b/i.test(scene.visual));
+}
 
 // Pixabay hits whose tags match the query, best matches first.
 const byTags = (hits, q) =>
@@ -126,6 +169,42 @@ const fromCommons = (photo, query) => ({
   query,
 });
 
+const fromCommonsVideo = (video, query) => ({
+  id: `v${video.pageid}`,
+  pageid: video.pageid,
+  source: "Wikimedia Commons",
+  kind: "video",
+  about: `Title: ${video.title}. ${Math.round(video.duration)} seconds at ${video.width}×${video.height}, shown as numbered stills, one from each uninterrupted stretch long enough for the scene`,
+  title: video.title,
+  pageURL: video.pageURL,
+  author: video.author,
+  license: video.license,
+  width: video.width,
+  height: video.height,
+  encodings: video.encodings,
+  videoLength: video.duration,
+  query,
+});
+
+const fromArchive = (film, query) => ({
+  id: `a${film.identifier}`,
+  pageid: `ia-${film.identifier}`,
+  source: "Internet Archive",
+  kind: "video",
+  about: `Title: ${film.title} (${film.year ?? "year unknown"}), from ${film.collection}. ${Math.round(film.duration)} seconds of old film at ${film.width}×${film.height}, shown as numbered stills, one from each uninterrupted stretch long enough for the scene. The catalog says: ${film.description || "nothing"}`,
+  title: film.title,
+  year: film.year,
+  pageURL: film.pageURL,
+  author: film.author,
+  license: film.license,
+  width: film.width,
+  height: film.height,
+  encodings: film.encodings,
+  videoLength: film.duration,
+  stills: ARCHIVE_STILLS,
+  query,
+});
+
 // Asks Claude for searches, scene by scene. Returns scene ID → queries.
 async function suggestSearches(label, promptName, title, scenes, tried = new Map()) {
   const list = scenes
@@ -164,9 +243,10 @@ async function pickFootage(title, scenes, candidates) {
       content.push({ type: "text", text: `\n## Scene ${scene.id} (${scene.type}, ${scene.seconds} seconds)\nOn screen: ${scene.visual}${place}\nNarration: ${scene.narration}` });
       const list = [];
       for (const c of candidates.get(scene.id)) {
-        const image = await still(c.thumbnail);
+        const sheet = c.encodings ? await shotSheet(c, scene.seconds, c.stills) : null;
+        const image = c.encodings ? sheet?.image : await still(c.thumbnail);
         if (!image) continue;
-        list.push(c);
+        list.push(sheet ? { ...c, windows: sheet.windows } : c);
         content.push({ type: "text", text: `Candidate ${list.length}: ${c.kind} from ${c.source}, ${c.about}` });
         content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } });
       }
@@ -180,8 +260,16 @@ async function pickFootage(title, scenes, candidates) {
       user: content,
       format: betaZodOutputFormat(Picks),
     });
-    for (const { scene, candidate } of Picks.parse(JSON.parse(reply)).picks) {
-      chosen.set(scene, shown.get(scene)?.[candidate - 1] ?? null);
+    for (const { scene, candidate, shot } of Picks.parse(JSON.parse(reply)).picks) {
+      const c = shown.get(scene)?.[candidate - 1] ?? null;
+      if (!c?.windows) {
+        chosen.set(scene, c);
+        continue;
+      }
+      // A Commons or Archive video plays just the chosen stretch.
+      const { windows, stills, ...pick } = c;
+      const w = windows[shot - 1] ?? windows[0];
+      chosen.set(scene, { ...pick, start: w.start, duration: w.end - w.start });
     }
   });
   return chosen;
@@ -189,8 +277,8 @@ async function pickFootage(title, scenes, candidates) {
 
 async function main() {
   const video = await findVideo(query, "Approved");
-  if (video.status !== "Approved" && !force) {
-    throw new Error(`"${video.title}" is "${video.status}", not "Approved". Approve the script in Notion first, or add --force.`);
+  if (!APPROVED.includes(video.status) && !force) {
+    throw new Error(`"${video.title}" is "${video.status}". Approve the script in Notion first, or add --force.`);
   }
   const dir = videoDir(video.slug);
   const planPath = join(dir, "scenes.json");
@@ -210,7 +298,8 @@ async function main() {
   const kept = new Map();
   for (const entry of previous) {
     const scene = scenes.find((s) => s.id === entry.id);
-    if (scene && entry.key === sceneKey(scene)) kept.set(scene.id, entry);
+    // Aerial scenes picked before the aerial zooms existed get one now.
+    if (scene && entry.key === sceneKey(scene) && (scene.type !== "aerial" || entry.zoomTried)) kept.set(scene.id, entry);
   }
   const todo = scenes.filter((s) => !kept.has(s.id));
   console.log(`Footage for "${video.title}": ${scenes.length} scenes${kept.size ? ` (${kept.size} already picked)` : ""}.`);
@@ -218,8 +307,8 @@ async function main() {
   // Each candidate goes to one scene only, and each uploader gets at most two slots
   // per scene, since popular results are often one shoot.
   const taken = new Set([...kept.values()].flatMap((e) => [e.pick, ...e.alternates].filter(Boolean).map((c) => c.id)));
-  async function gather(scene, pixabayQueries, commonsQueries) {
-    const found = { video: [], pixabayPhoto: [], commons: [] };
+  async function gather(scene, pixabayQueries, commonsQueries, archiveQueries = []) {
+    const found = { video: [], commonsVideo: [], archive: [], pixabayPhoto: [], commons: [] };
     const add = (bucket, limit, candidate) => {
       const list = found[bucket];
       const sameAuthor = list.filter((c) => c.author === candidate.author).length;
@@ -233,32 +322,57 @@ async function main() {
       for (const item of items) if (added < PER_QUERY && add(bucket, limit, item)) added++;
     };
     const commonsLimit = scene.type === "aerial" ? PER_SCENE.aerialCommons : PER_SCENE.commons;
-    for (const q of commonsQueries) take("commons", commonsLimit, (await searchCommons(q)).map((p) => fromCommons(p, q)));
+    for (const q of commonsQueries) {
+      const photos = (await searchCommons(q)).filter((p) => allowed(scene, p.title, "commons"));
+      take("commons", commonsLimit, photos.map((p) => fromCommons(p, q)));
+    }
     if (scene.type !== "aerial") {
+      for (const q of commonsQueries) {
+        // Stock scenes need sharp footage; real footage of a named place can be older.
+        const videos = (await searchCommonsVideos(q)).filter(
+          (v) => (scene.type !== "stock" || v.width >= 1280) && v.duration >= scene.seconds * MIN_LENGTH_SHARE && !VIDEO_JUNK.test(v.title) && allowed(scene, v.title, "commons"),
+        );
+        take("commonsVideo", PER_SCENE.commonsVideo, videos.map((v) => fromCommonsVideo(v, q)));
+      }
+      for (const q of archiveQueries) {
+        const films = (await searchArchive(q).catch(() => [])).filter(
+          (f) => f.duration >= scene.seconds * MIN_LENGTH_SHARE && !VIDEO_JUNK.test(f.title) && allowed(scene, f.title, "archive"),
+        );
+        take("archive", PER_SCENE.archive, films.map((f) => fromArchive(f, q)));
+      }
       for (const q of pixabayQueries) {
         const videos = (await searchVideos(q)).filter((h) => {
           const v = rendition(h);
-          return v && v.width > v.height && v.width >= 1280 && !h.isAiGenerated && !h.isLowQuality && h.duration >= scene.seconds * MIN_LENGTH_SHARE;
+          return v && v.width > v.height && v.width >= 1280 && !h.isAiGenerated && !h.isLowQuality && h.duration >= scene.seconds * MIN_LENGTH_SHARE && allowed(scene, h.tags);
         });
         take("video", PER_SCENE.video, byTags(videos, q).map((h) => fromVideo(h, q)));
-        const photos = (await searchPhotos(q)).filter((h) => h.imageWidth > h.imageHeight && h.imageWidth >= 1920 && !h.isAiGenerated);
+        const photos = (await searchPhotos(q)).filter((h) => h.imageWidth > h.imageHeight && h.imageWidth >= 1920 && !h.isAiGenerated && allowed(scene, h.tags));
         take("pixabayPhoto", PER_SCENE.pixabayPhoto, byTags(photos, q).map((h) => fromPixabayPhoto(h, q)));
       }
     }
-    return [...found.video, ...found.commons, ...found.pixabayPhoto];
+    return [...found.commonsVideo, ...found.archive, ...found.video, ...found.commons, ...found.pixabayPhoto];
   }
 
-  const candidates = new Map();
-  if (todo.length) {
-    console.log(`Planning Wikimedia Commons searches for ${todo.length} scenes...`);
-    const commonsQueries = await suggestSearches("commons searches", "commons", video.title, todo);
-    console.log("Searching Pixabay and Wikimedia Commons...");
-    for (const scene of todo) candidates.set(scene.id, await gather(scene, scene.search, commonsQueries.get(scene.id) ?? []));
+  // Aerial scenes fly down onto the real place; only where it can't be found do
+  // they look for a photo.
+  const zooms = await prepareAerials(video, dir, todo.filter((s) => s.type === "aerial"));
+  const searching = todo.filter((s) => !zooms.get(s.id));
+  const candidates = new Map(todo.map((s) => [s.id, []]));
+  if (searching.length) {
+    console.log(`Planning Wikimedia Commons searches for ${searching.length} scenes...`);
+    const commonsQueries = await suggestSearches("commons searches", "commons", video.title, searching);
+    // Only scenes about the past get old film; Claude leaves the rest without searches.
+    const archiveScenes = searching.filter((s) => s.type !== "aerial");
+    const archiveQueries = archiveScenes.length ? await suggestSearches("archive searches", "archive", video.title, archiveScenes) : new Map();
+    const looking = [...archiveQueries.values()].filter((q) => q.length).length;
+    console.log(`Searching Pixabay and Wikimedia Commons${looking ? `, and the Internet Archive for ${looking} ${looking === 1 ? "scene" : "scenes"} about the past` : ""}...`);
+    for (const scene of searching) candidates.set(scene.id, await gather(scene, scene.search, commonsQueries.get(scene.id) ?? [], archiveQueries.get(scene.id) ?? []));
   }
-  const chosen = await pickFootage(video.title, todo, candidates);
+  const chosen = await pickFootage(video.title, searching, candidates);
+  for (const [id, zoom] of zooms) if (zoom) chosen.set(id, zoom);
 
   // Where nothing fit, search again with simpler words, as an editor would.
-  const retry = todo.filter((s) => !chosen.get(s.id));
+  const retry = searching.filter((s) => !chosen.get(s.id));
   if (retry.length) {
     console.log(`Nothing fit for ${retry.length} scenes; searching again with simpler words...`);
     const tried = new Map(retry.map((s) => [s.id, [...new Set([...s.search, ...candidates.get(s.id).map((c) => c.query)])]]));
@@ -279,20 +393,28 @@ async function main() {
       seconds: scene.seconds,
       key: sceneKey(scene),
       pick,
-      alternates: candidates.get(scene.id).filter((c) => c !== pick),
+      alternates: candidates.get(scene.id).filter((c) => c.id !== pick?.id),
+      ...(scene.type === "aerial" ? { zoomTried: true } : {}),
     });
   }
   for (const { id, pick } of entries.values()) {
-    if (!pick) continue;
+    if (!pick || pick.kind === "aerial") continue;
     const ext = pick.kind === "video" ? ".mp4" : extname(pick.title ?? new URL(pick.url).pathname).toLowerCase();
     pick.file = `footage/${id}-${pick.id}${ext}`;
   }
-  const downloads = [...entries.values()].filter((e) => e.pick && !existsSync(join(dir, e.pick.file)));
+  const downloads = [...entries.values()].filter((e) => e.pick && e.pick.kind !== "aerial" && !existsSync(join(dir, e.pick.file)));
   let bytes = 0;
   if (downloads.length) console.log(`Downloading ${downloads.length} files...`);
   await inGroups(downloads, 4, async ({ id, pick }) => {
+    if (pick.encodings) {
+      // An alternate swapped in by hand plays from the start.
+      if (pick.start === undefined) Object.assign(pick, { start: 0.5, duration: Math.min(pick.videoLength - 0.5, entries.get(id).seconds + 1) });
+      await downloadStretch(pick, join(dir, pick.file));
+      bytes += statSync(join(dir, pick.file)).size;
+      return;
+    }
     const url = pick.source === "Wikimedia Commons" ? await photoURL(pick.title) : pick.url;
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    const res = await fetch(url, { headers: { "User-Agent": agentFor(url) } });
     if (!res.ok) throw new Error(`Couldn't download the ${pick.source} ${pick.kind} for scene ${id}: HTTP ${res.status}`);
     const data = Buffer.from(await res.arrayBuffer());
     writeFileSync(join(dir, pick.file), data);
@@ -301,22 +423,26 @@ async function main() {
 
   const all = scenes.map((s) => entries.get(s.id));
   const picks = all.filter((e) => e.pick).map((e) => e.pick);
-  const credits = [...new Map(picks.map((p) => [p.id, { source: p.source, title: p.title, author: p.author, license: p.license, pageURL: p.pageURL }])).values()];
+  // All the aerial zooms share one credit. Public-domain and CC0 picks are listed
+  // too, which costs nothing and answers a copyright claim on them.
+  const credits = [
+    ...new Map(picks.map((p) => [p.kind === "aerial" ? "usgs" : p.id, { source: p.source, title: p.title, author: p.author, license: p.license, pageURL: p.pageURL }])).values(),
+  ];
   writeFileSync(footagePath, `${JSON.stringify({ title: video.title, slug: video.slug, fetchedAt: new Date().toISOString(), scenes: all, credits }, null, 2)}\n`);
 
   // Files no scene uses any more, e.g. after a swap.
-  const used = new Set(picks.map((p) => p.file.replace("footage/", "")));
+  const used = new Set(picks.flatMap((p) => (p.kind === "aerial" ? p.levels.map((l) => l.file) : [p.file])).map((f) => f.replace("footage/", "")));
   const unused = readdirSync(footageDir).filter((f) => !used.has(f));
   for (const f of unused) rmSync(join(footageDir, f));
 
   const missing = all.filter((e) => !e.pick);
   const count = (fn) => picks.filter(fn).length;
   console.log(`
-Done: ${picks.length} of ${all.length} scenes have footage: ${count((p) => p.kind === "video")} videos, ${count((p) => p.source === "Wikimedia Commons")} Wikimedia Commons photos, ${count((p) => p.source === "Pixabay" && p.kind === "photo")} Pixabay photos.
+Done: ${picks.length} of ${all.length} scenes have footage: ${count((p) => p.kind === "aerial")} aerial zooms, ${count((p) => p.kind === "video" && p.source === "Wikimedia Commons")} Wikimedia Commons videos, ${count((p) => p.source === "Internet Archive")} Internet Archive films, ${count((p) => p.kind === "video" && p.source === "Pixabay")} Pixabay videos, ${count((p) => p.kind === "photo" && p.source === "Wikimedia Commons")} Wikimedia Commons photos, ${count((p) => p.source === "Pixabay" && p.kind === "photo")} Pixabay photos.
   Downloaded: ${downloads.length} files, ${(bytes / 1e6).toFixed(0)} MB, to media/${video.slug}/footage/${unused.length ? ` (removed ${unused.length} unused)` : ""}${
     missing.length ? `\n  Nothing fit, so these get a graphic instead: scenes ${missing.map((e) => e.id).join(", ")}` : ""
   }
-  Credits needed in the description: ${credits.filter((c) => c.source === "Wikimedia Commons" && !/^(CC0|Public domain)/i.test(c.license)).length} Wikimedia Commons photos
+  Credits needed in the description: ${credits.filter((c) => c.source !== "Pixabay" && c.license && !/^(CC0|Public domain)/i.test(c.license)).length} Wikimedia Commons and Internet Archive videos and photos
   Claude cost: about $${totalSpent().toFixed(2)}
   Saved: media/${video.slug}/footage.json`);
 }

@@ -1,6 +1,7 @@
 // Turns the "## Script" section of a video's Notion page into narration.
 // ### headings name the parts, "> " lines are notes for Jake, and every other
-// line is a paragraph the narrator reads.
+// line is a paragraph the narrator reads. A paragraph starting with [pause] or
+// [long pause] gets a beat of silence before it.
 import { unescapeMarkdown } from "./notion.mjs";
 
 // Markdown to plain spoken text: keep link text, drop emphasis and escapes.
@@ -19,6 +20,7 @@ function spoken(line) {
 export function parseScript(scriptMarkdown) {
   const paragraphs = [];
   let part = "Intro";
+  let pending = null;
   for (const raw of scriptMarkdown.split("\n")) {
     const line = raw.trim();
     // Skip blanks, notes, and Notion's own tags such as <empty-block/>.
@@ -27,10 +29,21 @@ export function parseScript(scriptMarkdown) {
       part = spoken(line.replace(/^#+\s*/, ""));
       continue;
     }
-    paragraphs.push({ part, text: spoken(line), raw: line });
+    const text = spoken(line);
+    const beat = text.match(BEAT)?.[1].toLowerCase() ?? pending;
+    pending = null;
+    // A marker on a line of its own applies to the next paragraph.
+    if (!text.replace(BEAT, "")) {
+      pending = beat;
+      continue;
+    }
+    paragraphs.push({ part, text: text.replace(BEAT, ""), raw: line, beat });
   }
   return paragraphs;
 }
+
+// The beat marker at the start of a paragraph, as Jake sees it in Notion.
+export const BEAT = /^\[(pause|long pause)\]\s*/i;
 
 // Paragraphs with [bracketed notes], which the narrator would read aloud.
 export const bracketNotes = (paragraphs) => paragraphs.filter((p) => /\[[^\]]*\]/.test(p.text));
@@ -82,5 +95,5 @@ export function fitToSentences(scenes, count) {
   return { scenes: fitted, repaired };
 }
 
-// Narrator pace: about 150 words a minute.
-export const WORDS_PER_SECOND = 2.5;
+// Narrator pace once sped up in the voice step (SPEED): about 170 words a minute.
+export const WORDS_PER_SECOND = 2.83;

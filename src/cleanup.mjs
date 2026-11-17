@@ -1,7 +1,7 @@
 // Before scenes are planned, tidies the lines Jake changed or added in the approved
 // script so the narrator reads them cleanly, and writes them back to Notion so the
 // page shows exactly what will be said.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
@@ -24,9 +24,12 @@ export async function cleanEdits(video, dir, paragraphs) {
     return paragraphs;
   }
 
-  // Lines matching Claude's draft, or cleaned on an earlier run, are left alone.
+  // Lines matching any of Claude's drafts (the latest and the earlier ones kept as
+  // script-draft-1.md, -2, ...), or cleaned on an earlier run, are left alone.
   const cleanedBefore = existsSync(cleanedPath) ? JSON.parse(readFileSync(cleanedPath, "utf8")) : [];
-  const known = new Set([...parseScript(readFileSync(draftPath, "utf8")).map((p) => p.text), ...cleanedBefore]);
+  const drafts = readdirSync(dir).filter((f) => /^script-draft(-\d+)?\.md$/.test(f));
+  const fromDrafts = drafts.flatMap((f) => parseScript(readFileSync(join(dir, f), "utf8")).map((p) => p.text));
+  const known = new Set([...fromDrafts, ...cleanedBefore]);
   const edited = paragraphs.flatMap((p, index) => (known.has(p.text) ? [] : [{ ...p, index }]));
   if (!edited.length) {
     console.log("No edits of yours to clean up.");
@@ -60,13 +63,15 @@ export async function cleanEdits(video, dir, paragraphs) {
   edited.forEach((p, n) => {
     const text = cleaned.get(n + 1);
     if (!text || text === p.text) return;
-    result[p.index] = { part: p.part, text, raw: escapeMarkdown(text) };
-    changes.push({ before: p.text, after: text, raw: p.raw });
+    // Keep the line's [pause] marker, written the way it was on the page.
+    const marker = p.raw.match(/^\\?\[(?:long )?pause\\?\]\s*/i)?.[0] ?? "";
+    result[p.index] = { part: p.part, text, raw: marker + escapeMarkdown(text), beat: p.beat };
+    changes.push({ before: p.text, after: text, raw: p.raw, to: marker + escapeMarkdown(text) });
   });
 
   let warnings = [];
   if (changes.length) {
-    warnings = await editMarkdown(video.id, changes.map((c) => ({ from: c.raw, to: escapeMarkdown(c.after) })));
+    warnings = await editMarkdown(video.id, changes.map((c) => ({ from: c.raw, to: c.to })));
   }
   writeFileSync(cleanedPath, `${JSON.stringify([...cleanedBefore, ...edited.map((p) => result[p.index].text)], null, 2)}\n`);
 

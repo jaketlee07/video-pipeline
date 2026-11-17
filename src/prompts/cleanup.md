@@ -5,6 +5,6 @@ Tidy each edited line for narration:
 - Spell out anything a narrator might misread: symbols (%, $, &, ~), abbreviations ("approx.", "vs", "govt"), shorthand ("shld", "lol") and ambiguous numbers ("2.3B" becomes "2.3 billion").
 - Smooth the wording so it fits the script around it.
 
-Keep his meaning, his opinion and his facts exactly. Change as little as you can: this is a copyedit, not a rewrite. If a line is already fine, return it unchanged. If a line contains a note in [brackets], leave the note exactly as it is.
+Keep his meaning, his opinion and his facts exactly. Change as little as you can: this is a copyedit, not a rewrite. If a line is already fine, return it unchanged. If a line contains a note in [brackets], leave the note exactly as it is. A [pause] or [long pause] at the start of a line has already been taken off; don't add one.
 
 {{edits}}

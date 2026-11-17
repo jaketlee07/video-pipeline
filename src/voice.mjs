@@ -1,7 +1,7 @@
 // Narration (guide stage 5): the narrator reads the approved script one paragraph
 // per request, and ElevenLabs' character timings give every sentence, word and
 // scene its start and end in the audio. Writes media/<slug>/narration.wav and
-// timing.json.
+// timing.json, then checks the narration against the script (src/listen.mjs).
 //
 //   npm run voice                      the row with Status "Approved"
 //   npm run voice -- walmart           the row with "walmart" in its title
@@ -10,11 +10,13 @@
 // Each paragraph's audio is kept in media/<slug>/voice/, so a rerun only pays for
 // paragraphs that are new or changed.
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VOICE_MODEL, speak, voiceId } from "./elevenlabs.mjs";
-import { findVideo, getMarkdown, pageSection } from "./notion.mjs";
+import { checkNarration } from "./listen.mjs";
+import { APPROVED, findVideo, getMarkdown, pageSection } from "./notion.mjs";
 import { videoDir } from "./paths.mjs";
 import { parseScript, splitSentences } from "./script.mjs";
 
@@ -25,21 +27,43 @@ const query = args.filter((a) => !a.startsWith("--")).join(" ") || undefined;
 
 const SAMPLE_RATE = 44100;
 const SAMPLE_PARAGRAPHS = 3;
-// Silence between paragraphs, and between parts of the script, in seconds.
-const PARAGRAPH_PAUSE = 0.35;
-const PART_PAUSE = 0.8;
+// How much faster than ElevenLabs' delivery the narration plays: 1.12 turns about
+// 151 words a minute into about 170, near the pace of the channels this one is
+// modelled on (180 to 215). Applied when the paragraphs are joined, so changing it
+// and rerunning costs no credits.
+const SPEED = 1.12;
+// Silence between paragraphs, between parts of the script, and before a paragraph
+// marked [pause] or [long pause] (a beat before a reveal), in seconds.
+const PARAGRAPH_PAUSE = 0.3;
+const PART_PAUSE = 1.1;
+const BEAT_PAUSE = { pause: 1.3, "long pause": 2.2 };
 // ElevenLabs only stitches onto requests under two hours old.
 const STITCH_MAX_AGE_MS = 110 * 60 * 1000;
 
 const round = (seconds) => Math.round(seconds * 1000) / 1000;
 const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
 
-// Decodes an MP3 to 16-bit mono PCM at SAMPLE_RATE.
+// Decodes an MP3 to 16-bit mono PCM at SAMPLE_RATE, sped up by SPEED (pitch kept).
 const decode = (file) =>
-  execFileSync("ffmpeg", ["-v", "error", "-i", file, "-f", "s16le", "-ac", "1", "-ar", String(SAMPLE_RATE), "-"], {
+  execFileSync("ffmpeg", ["-v", "error", "-i", file, "-af", `atempo=${SPEED}`, "-f", "s16le", "-ac", "1", "-ar", String(SAMPLE_RATE), "-"], {
     maxBuffer: 1 << 30,
   });
 const silence = (seconds) => Buffer.alloc(Math.round(seconds * SAMPLE_RATE) * 2);
+
+// YouTube plays videos at about -14 LUFS: it turns louder ones down but never turns
+// quieter ones up. Measures the narration, then applies one fixed gain to reach it,
+// keeping peaks under -1.5 dB. The narration is mono and the video plays it on both
+// stereo channels, which measures 3 dB louder, so the mono target is -17.
+function normalizeLoudness(inPath, outPath) {
+  const target = "I=-17:TP=-1.5:LRA=11";
+  const measured = spawnSync("ffmpeg", ["-nostdin", "-hide_banner", "-i", inPath, "-af", `loudnorm=${target}:print_format=json`, "-f", "null", "-"], {
+    encoding: "utf8",
+  }).stderr;
+  const m = JSON.parse(measured.slice(measured.lastIndexOf("{"), measured.lastIndexOf("}") + 1));
+  const apply = `loudnorm=${target}:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true`;
+  execFileSync("ffmpeg", ["-nostdin", "-v", "error", "-y", "-i", inPath, "-af", apply, "-ar", String(SAMPLE_RATE), "-ac", "1", "-c:a", "pcm_s16le", outPath]);
+  return Number(m.input_i);
+}
 
 // 16-bit mono PCM as a WAV file.
 function wav(pcm) {
@@ -61,8 +85,8 @@ function wav(pcm) {
 
 async function main() {
   const video = await findVideo(query, "Approved");
-  if (video.status !== "Approved" && !force) {
-    throw new Error(`"${video.title}" is "${video.status}", not "Approved". Approve the script in Notion first, or add --force.`);
+  if (!APPROVED.includes(video.status) && !force) {
+    throw new Error(`"${video.title}" is "${video.status}". Approve the script in Notion first, or add --force.`);
   }
   const dir = videoDir(video.slug);
   const planPath = join(dir, "scenes.json");
@@ -75,7 +99,8 @@ async function main() {
   if (sentences.map((s) => s.text).join("\n") !== plan.sentences.map((s) => s.text).join("\n")) {
     throw new Error("narration.txt and scenes.json don't match. Run npm run scenes again.");
   }
-  const onPage = parseScript(pageSection(await getMarkdown(video.id), "Script") ?? "").map((p) => p.text);
+  const page = parseScript(pageSection(await getMarkdown(video.id), "Script") ?? "");
+  const onPage = page.map((p) => p.text);
   if (onPage.join("\n") !== paragraphs.join("\n")) {
     throw new Error("The script on the Notion page changed after its scenes were planned. Run npm run scenes again, then this.");
   }
@@ -87,6 +112,7 @@ async function main() {
     return {
       text,
       part: plan.sentences[sentences.findIndex((s) => s.paragraph === i)].part,
+      beat: page[i].beat,
       audioPath: join(voiceDir, `${key}.mp3`),
       metaPath: join(voiceDir, `${key}.json`),
     };
@@ -134,15 +160,16 @@ async function main() {
   let time = 0;
   for (const [i, chunk] of todo.entries()) {
     if (i > 0) {
-      const pause = silence(chunk.part === todo[i - 1].part ? PARAGRAPH_PAUSE : PART_PAUSE);
+      const pause = silence(Math.max(chunk.part === todo[i - 1].part ? PARAGRAPH_PAUSE : PART_PAUSE, BEAT_PAUSE[chunk.beat] ?? 0));
       audio.push(pause);
       time += pause.length / 2 / SAMPLE_RATE;
     }
     const pcm = decode(chunk.audioPath);
     const length = pcm.length / 2 / SAMPLE_RATE;
-    // ElevenLabs' last timings can run a few hundredths of a second past the audio.
+    // ElevenLabs' timings are for its own pace, so they shrink by SPEED. Its last
+    // timings can run a few hundredths of a second past the audio.
     const { character_start_times_seconds: starts, character_end_times_seconds: ends } = meta(chunk).alignment;
-    const at = (seconds) => round(time + Math.min(seconds, length));
+    const at = (seconds) => round(time + Math.min(seconds / SPEED, length));
     let from = 0;
     for (const s of sentences.filter((x) => x.paragraph === i)) {
       const first = chunk.text.indexOf(s.text, from);
@@ -159,7 +186,14 @@ async function main() {
   }
   const duration = round(time);
   const outName = sample ? "sample.wav" : "narration.wav";
-  writeFileSync(join(dir, outName), wav(Buffer.concat(audio)));
+  const raw = join(tmpdir(), `video-pipeline-${process.pid}.wav`);
+  writeFileSync(raw, wav(Buffer.concat(audio)));
+  try {
+    const before = normalizeLoudness(raw, join(dir, outName));
+    console.log(`  Loudness: raised from ${before} LUFS toward YouTube's -14 LUFS`);
+  } finally {
+    rmSync(raw, { force: true });
+  }
 
   if (sample) {
     console.log(`\nSample: media/${video.slug}/sample.wav (${clock(duration)}). ElevenLabs credits used: ${credits.toLocaleString("en-US")}`);
@@ -180,7 +214,7 @@ async function main() {
   writeFileSync(
     join(dir, "timing.json"),
     `${JSON.stringify(
-      { title: video.title, slug: video.slug, voice: { id: voiceId, model: VOICE_MODEL }, voicedAt: new Date().toISOString(), audio: outName, duration, scenes, sentences: timedSentences, words },
+      { title: video.title, slug: video.slug, voice: { id: voiceId, model: VOICE_MODEL, speed: SPEED }, voicedAt: new Date().toISOString(), audio: outName, duration, scenes, sentences: timedSentences, words },
       null,
       2,
     )}\n`,
@@ -195,6 +229,13 @@ Done: "${video.title}" is narrated.
   Timing: ${scenes.length} scenes, ${timedSentences.length} sentences and ${words.length} words; longest scene ${(longest.end - longest.start).toFixed(1)} s (scene ${longest.id})
   Saved: media/${video.slug}/timing.json
   Listen: open media/${video.slug}/narration.wav`);
+
+  // Whisper checks the narration says what the script says.
+  try {
+    await checkNarration(video, dir);
+  } catch (err) {
+    console.log(`\nNarration check failed (${err.message}); run npm run listen to try again.`);
+  }
 }
 
 main().catch((err) => {

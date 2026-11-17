@@ -10,7 +10,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { MODEL, ask, prompt, totalSpent } from "./claude.mjs";
 import { cleanEdits } from "./cleanup.mjs";
-import { findVideo, getMarkdown, pageSection, unescapeMarkdown } from "./notion.mjs";
+import { APPROVED, findVideo, getMarkdown, pageSection, unescapeMarkdown } from "./notion.mjs";
 import { videoDir } from "./paths.mjs";
 import { WORDS_PER_SECOND, bracketNotes, fitToSentences, parseScript, splitSentences } from "./script.mjs";
 
@@ -21,7 +21,7 @@ const query = args.filter((a) => a !== "--force").join(" ") || undefined;
 const Scene = z.object({
   first: z.number().int().describe("Number of the first sentence in this scene"),
   last: z.number().int().describe("Number of the last sentence in this scene"),
-  type: z.enum(["stock", "chart", "number", "map", "aerial", "title", "image"]),
+  type: z.enum(["stock", "flow", "document", "chart", "number", "map", "aerial", "title", "image"]),
   visual: z.string().describe("What's on screen, in one sentence"),
   search: z.array(z.string()).describe("Two or three Pixabay video queries for fallback b-roll"),
   text: z.string().nullable().describe("On-screen words for number and title scenes, otherwise null"),
@@ -29,20 +29,114 @@ const Scene = z.object({
   chart: z
     .object({
       kind: z.enum(["bar", "line"]),
-      title: z.string(),
+      headline: z.string().describe("One or two words naming what the data shows, like 'BURNOUT'"),
+      title: z.string().describe("What's plotted, plainly"),
       unit: z.string(),
       points: z.array(z.object({ label: z.string(), value: z.number() })),
       source: z.string(),
     })
     .nullable()
     .describe("For chart scenes only, otherwise null"),
+  flow: z
+    .object({
+      title: z.string().describe("A short heading for the diagram, like 'Where the sales tax goes'"),
+      parties: z
+        .array(
+          z.object({
+            id: z.string().describe("A short key, like 'city'"),
+            label: z.string().describe("Its name on screen, at most about 22 characters, like 'Fairfield City Hall'"),
+            icon: z.enum(["person", "household", "store", "government", "bank", "company", "investor", "factory", "building", "truck"]),
+            note: z.string().nullable().describe("A short detail under the name, like 'pop. 11,000', or null"),
+          }),
+        )
+        .describe("Two to five parties, in the order they should sit left to right"),
+      moves: z
+        .array(
+          z.object({
+            from: z.string().describe("A party id"),
+            to: z.string().describe("A party id"),
+            kind: z.enum(["money", "goods", "people", "blocked"]).describe("blocked: a flow that stops or is barred"),
+            label: z.string().describe("What moves, in two to four words, like 'sales tax'"),
+            amount: z.string().nullable().describe("Like '$105K a month', only when the brief gives it, otherwise null"),
+          }),
+        )
+        .describe("One to six moves, in the order the narration mentions them"),
+    })
+    .nullable()
+    .describe("For flow scenes only, otherwise null"),
+  document: z
+    .object({
+      kind: z.enum(["news", "court", "filing", "statement", "study", "law", "deed", "letter"]),
+      source: z.string().describe("Who published it, like 'WBRC' or 'U.S. Bankruptcy Court, N.D. Alabama'"),
+      date: z.string().describe("As precise as the brief gives it, like 'January 15, 2016' or '2018'"),
+      heading: z
+        .string()
+        .describe("The source's own title exactly as the brief's Sources list gives it; only for a record with no title there (a docket, deed or law), what it is in plain words, like 'Chapter 9 petition, City of Fairfield'"),
+      quote: z.string().nullable().describe("Exact words the brief shows in quotation marks from this source, or null"),
+      highlight: z.string().nullable().describe("A few words copied exactly from the quote to highlight, or null"),
+      speaker: z.string().nullable().describe("Who said or wrote the quote, with their role, or null"),
+      url: z.string().nullable().describe("The source's link from the brief, or null"),
+    })
+    .nullable()
+    .describe("For document scenes only, otherwise null"),
 });
 const Plan = z.object({ scenes: z.array(Scene) });
 
+// Quotes shown on screen must appear word for word in the brief. Drops any that
+// don't (the document keeps its heading) and returns those scenes' numbers.
+const comparable = (text) =>
+  text
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[—–]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+function checkQuotes(scenes, brief) {
+  const source = comparable(brief);
+  const dropped = [];
+  for (const [i, scene] of scenes.entries()) {
+    const doc = scene.document;
+    if (!doc?.quote) continue;
+    const quote = comparable(doc.quote).replace(/^["']|["']$/g, "").replace(/^\.{3}|\.{3}$|…/g, "").trim();
+    if (!source.includes(quote)) {
+      Object.assign(doc, { quote: null, highlight: null, speaker: null });
+      dropped.push(i + 1);
+    } else if (doc.highlight && !comparable(doc.quote).includes(comparable(doc.highlight))) {
+      doc.highlight = null;
+    }
+  }
+  return dropped;
+}
+
+// A document card looks like the real source, so its heading must be the source's
+// real title: anyone searching for it should find it. Sets each heading to the
+// title its link has in the brief's Sources list ("[Title — Publisher, Year](url)")
+// and returns the scenes whose heading changed.
+const linkKey = (url) => url.toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/[/#?]+$/, "");
+function useSourceTitles(scenes, brief) {
+  const sources = brief.split(/^###\s+Sources\s*$/im)[1]?.split(/^###\s/m)[0] ?? "";
+  const titles = new Map();
+  for (const [, text, url] of sources.matchAll(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g)) {
+    const parts = text.split(/\s+[—–]\s+/);
+    titles.set(linkKey(url), (parts.length > 1 ? parts.slice(0, -1).join(" — ") : text).trim());
+  }
+  const retitled = [];
+  for (const [i, scene] of scenes.entries()) {
+    const doc = scene.document;
+    const title = doc?.url && titles.get(linkKey(doc.url));
+    if (title && title !== doc.heading) {
+      doc.heading = title;
+      retitled.push(i + 1);
+    }
+  }
+  return retitled;
+}
+
 async function main() {
   const video = await findVideo(query, "Approved");
-  if (video.status !== "Approved" && !force) {
-    throw new Error(`"${video.title}" is "${video.status}", not "Approved". Approve the script in Notion first, or add --force.`);
+  if (!APPROVED.includes(video.status) && !force) {
+    throw new Error(`"${video.title}" is "${video.status}". Approve the script in Notion first, or add --force.`);
   }
 
   const markdown = await getMarkdown(video.id);
@@ -51,7 +145,7 @@ async function main() {
   const notes = bracketNotes(parseScript(scriptMarkdown));
   if (notes.length) {
     const list = notes.map((n) => `  - ${n.text}`).join("\n");
-    throw new Error(`The script has [bracketed] notes the narrator would read aloud. Remove them first:\n${list}`);
+    throw new Error(`The script has [bracketed] notes the narrator would read aloud ([pause] only works at the start of a paragraph). Remove them first:\n${list}`);
   }
   const dir = videoDir(video.slug);
   const paragraphs = await cleanEdits(video, dir, parseScript(scriptMarkdown));
@@ -66,18 +160,21 @@ async function main() {
   const totalWords = sentences.reduce((sum, s) => sum + s.words, 0);
   console.log(`Planning scenes for "${video.title}" (${sentences.length} sentences, about ${(totalWords / WORDS_PER_SECOND / 60).toFixed(1)} min)...`);
 
+  const brief = unescapeMarkdown(pageSection(markdown, "Brief") ?? "(no brief on the page)");
   const reply = await ask({
     label: "scenes",
     system: prompt("channel"),
     user: prompt("scenes", {
       title: video.title,
       count: String(sentences.length),
-      brief: unescapeMarkdown(pageSection(markdown, "Brief") ?? "(no brief on the page)"),
+      brief,
       sentences: listing.join("\n").trim(),
     }),
     format: betaZodOutputFormat(Plan),
   });
   const { scenes, repaired } = fitToSentences(Plan.parse(JSON.parse(reply)).scenes, sentences.length);
+  const unquoted = checkQuotes(scenes, brief);
+  const retitled = useSourceTitles(scenes, brief);
 
   const planned = scenes.map((scene, i) => {
     const lines = sentences.slice(scene.first - 1, scene.last);
@@ -115,14 +212,17 @@ async function main() {
   const totalSeconds = planned.reduce((sum, s) => sum + s.estSeconds, 0);
   const share = (types) =>
     Math.round((100 * planned.filter((s) => types.includes(s.type)).reduce((sum, s) => sum + s.estSeconds, 0)) / totalSeconds);
+  const count = (type) => planned.filter((s) => s.type === type).length;
   const long = planned.filter((s) => s.estSeconds > 15);
 
   console.log(`
 Done: ${planned.length} scenes, about ${(totalSeconds / planned.length).toFixed(1)} seconds each.
-  Screen time: graphics ${share(["chart", "number", "map", "title"])}%, stock ${share(["stock"])}%, aerial ${share(["aerial"])}%, real imagery ${share(["image"])}%
-  Charts: ${planned.filter((s) => s.type === "chart").length}, maps and aerials: ${planned.filter((s) => s.type === "map" || s.type === "aerial").length}${
+  Screen time: flows and documents ${share(["flow", "document"])}%, other graphics ${share(["chart", "number", "map", "title"])}%, stock ${share(["stock"])}%, aerial ${share(["aerial"])}%, real imagery ${share(["image"])}%
+  Flows: ${count("flow")}, documents: ${count("document")}, charts: ${count("chart")}, numbers: ${count("number")}, maps and aerials: ${count("map") + count("aerial")}${
     long.length ? `\n  Longer than 15 seconds: scenes ${long.map((s) => s.id).join(", ")}` : ""
-  }${repaired ? `\n  Fixed ${repaired} scene boundaries so every sentence is covered once.` : ""}
+  }${repaired ? `\n  Fixed ${repaired} scene boundaries so every sentence is covered once.` : ""}${
+    unquoted.length ? `\n  Dropped quotes not found word for word in the brief: scenes ${unquoted.join(", ")}` : ""
+  }${retitled.length ? `\n  Document headings set to the source's real title: scenes ${retitled.join(", ")}` : ""}
   Claude cost: about $${totalSpent().toFixed(2)}
   Saved: media/${video.slug}/scenes.json and narration.txt`);
 }

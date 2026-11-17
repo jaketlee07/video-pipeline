@@ -86,26 +86,30 @@ AI video (Higgsfield, Grok) is not in the core stack. Add it only for a scene th
 
 ## Video Format
 
-Each long video runs 10 to 14 minutes (about 1,500 to 2,200 words of script) and spins off 2 to 3 Shorts.
+Each long video runs 12 to 23 minutes (about 1,800 to 3,500 words of script, depending on how much the research supports) and spins off 2 to 3 Shorts. Reference channel: Modern MBA, which covers the same territory industry by industry with an on-camera host. This channel's edge is the ground-level view: one named town or store, on a map.
 
-**Script structure:**
+**Script structure:** a story, not a list.
 
-1. **Hook (0 to 15s):** the surprising claim or question. Example: "When Walmart left this town, three other businesses died within a year."
-2. **Setup (to about 1:30):** why this matters to the viewer personally.
-3. **3 to 5 sections:** each one reveal, backed by a number or a real case.
-4. **Twist or takeaway:** the non-obvious conclusion, in your own words.
-5. **Tease:** point to the next or a related video.
+1. **Hook (0 to 30s):** drop into one real moment, a named place on a date, and make the surprising claim. Example: "On January 28, 2016, the Walmart in Fairfield, Alabama closed, and took a third of the city's sales tax with it."
+2. **Setup (to about 1:30):** why this matters to the viewer, and the video's argument in one sentence.
+3. **How the money works:** who pays whom, step by step, drawn as a flow diagram.
+4. **4 to 6 chapters:** moving forward in time, each with named people or companies, a turn, and one reveal backed by a number, a case or a quoted document.
+5. **Twist or takeaway:** the non-obvious conclusion.
+6. **Tease:** point to the next or a related video.
 
 **Visual mix per video:**
 
 | Visual type | Share | Source |
 | --- | --- | --- |
-| Motion graphics: charts, maps, big numbers, text callouts | \~40% | Remotion components (your signature look) |
-| Stock b-roll | \~35% | Pexels, Pixabay via API |
-| Aerials of real places | \~15% | Google Earth Studio |
-| Real branded imagery | \~10% | Press kits, Wikimedia Commons |
+| Evidence and explanation: money-flow diagrams, source documents with the key line highlighted | \~20% | Remotion components, from the brief's money flows and exact quotes |
+| Other graphics: charts with a one-word headline, maps, big numbers, text callouts | \~30% | Remotion components (your signature look) |
+| Stock b-roll | \~20% | Pixabay via API, only for ordinary visible things, never as a metaphor |
+| Aerials of real places | \~15% | Wikimedia Commons, or a map zoom |
+| Real branded imagery | \~15% | Press kits, Wikimedia Commons |
 
-**Rules of thumb:** a new visual every 8 to 12 seconds; captions always on. Because every channel uses the same free stock, the brand lives in the graphics: one color palette, one font pair, one chart style, one map style, used in every video. Optional: a simple illustrated mascot (static art animated in Remotion) that pops in to point at key numbers.
+**Rules of thumb:** a new visual every 8 to 12 seconds; narration at about 170 words a minute (the channels this one is modelled on run 180 to 215), with a beat before the biggest reveals and a longer gap between chapters. No burned-in captions on long videos, as none of those channels use them: upload the exact .srt instead. Burned-in, word-by-word captions without punctuation are for Shorts. Because every channel uses the same free stock, the brand lives in the graphics: one color palette, one font pair, one chart style, one map style, used in every video. Showing the actual sources on screen is also the channel's best answer to YouTube's inauthentic content policy, which judges whether a whole channel looks templated and mass-produced.
+
+**Packaging (for the title, thumbnail and description stage):** titles state the argument ("Nobody Makes Money Renting Cars", not "The Economics of Car Rental"). Thumbnails put a few big words over a real photo of the place, with logos where they help. Descriptions retell the story in two or three short paragraphs naming the places and companies, then list the sources and photo credits. Optional: a simple illustrated mascot (static art animated in Remotion) that pops in to point at key numbers.
 
 **Shorts:** each built around the single most surprising stat from the long video, ending with a pointer to it.
 
@@ -118,7 +122,7 @@ Code assembles the video; you only check the script and the final render. Two hu
 | 1 | Topic pick | Notion/Airtable, Claude, Google Trends | 20 ideas a month, competitor scan | Mark the best one "Go" |
 | 2 | Research brief | Claude with web search | Data, studies, case examples with sources | Fact-check key numbers |
 | 3 | Script | Claude + script template | First draft in your structure | **Checkpoint 1:** rewrite hook, add your takes, approve |
-| 4 | Scene JSON | Claude | Each narration chunk mapped to a scene type (stock, chart, map, number, title) with search keywords and data | None |
+| 4 | Scene JSON | Claude | Each narration chunk mapped to a scene type (flow, document, chart, map, number, title, stock) with search keywords and data | None |
 | 5 | Voiceover | ElevenLabs API | Word-level timestamps generated | Listen through once; fix mispronunciations |
 | 6 | Stock fetch | Script calling Pexels/Pixabay APIs | Top 3 clips per scene downloaded | None |
 | 7 | Aerials | Google Earth Studio | Reusable flyover templates | Set the location (a few minutes) |
