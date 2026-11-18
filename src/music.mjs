@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { ask, prompt } from "./claude.mjs";
+import { clock, partsOf } from "./parts.mjs";
 
 export const LIBRARY = fileURLToPath(new URL("../media/music/", import.meta.url));
 // What each mood folder is for, told to Claude when it picks.
@@ -57,7 +58,6 @@ const Plan = z.object({
 });
 
 const hash = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
-const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 // ---- The library ------------------------------------------------------------
 
@@ -107,22 +107,6 @@ export function scanLibrary(root = LIBRARY) {
 
 // ---- Which mood where -------------------------------------------------------
 
-// The script's parts in order, with when each is spoken.
-function partsOf(plan, timing) {
-  const time = new Map(timing.sentences.map((s) => [s.id, s]));
-  const parts = [];
-  for (const s of plan.sentences) {
-    if (parts.at(-1)?.name === s.part) parts.at(-1).sentences.push(s);
-    else parts.push({ name: s.part, sentences: [s] });
-  }
-  return parts.map((p) => ({
-    name: p.name,
-    text: p.sentences.map((s) => s.text).join(" "),
-    start: time.get(p.sentences[0].id).start,
-    end: time.get(p.sentences.at(-1).id).end,
-  }));
-}
-
 async function chooseMoods(video, parts, moods, cached) {
   const instructions = prompt("music", { title: video.title, moods: moods.join(", "), parts: "" });
   const key = hash([parts.map((p) => [p.name, p.text]), moods, instructions]);
@@ -132,7 +116,7 @@ async function chooseMoods(video, parts, moods, cached) {
     label: "music moods",
     effort: "medium",
     maxTokens: 8000,
-    system: "You choose background music for a faceless YouTube channel about the hidden economics of everyday things.",
+    system: "You choose background music for a faceless YouTube channel of case studies on how the world really works.",
     user: prompt("music", {
       title: video.title,
       moods: moods.map((m) => `- ${m}: ${MOODS[m] ?? "as the name says"}`).join("\n"),

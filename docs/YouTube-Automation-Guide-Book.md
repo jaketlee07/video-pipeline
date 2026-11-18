@@ -4,7 +4,7 @@ Oct 16, 2026 · @Jake
 
 ## Overview
 
-The plan: one YouTube channel explaining the hidden economics of everyday things, built from free stock footage and code-driven motion graphics (no AI video), run as a 90-day test at about $22 to $50 a month and roughly 4 to 6 hours a week. Alternatives considered are recorded at the end for future use.
+The plan: one YouTube channel of case studies on how the world really works, built from free stock footage and code-driven motion graphics (no AI video), run as a 90-day test at about $22 to $50 a month and roughly 4 to 6 hours a week. Alternatives considered are recorded at the end for future use.
 
 **Why this niche.** Business and economics explainers earn roughly $6 to $15 per 1,000 views, versus about $0.33 to $3 for Made for Kids content. The proven reference is "How A Single Costco Changes Its Local Economy" by Micro: a familiar place seen through an unexpected economic lens.
 
@@ -21,11 +21,11 @@ The plan: one YouTube channel explaining the hidden economics of everyday things
 
 ## Niche and Positioning
 
-**Niche:** the hidden economics of everyday things.
+**Niche:** case studies on how the world really works: one real story (a company, a town, a product, a decision, an event) broken down from the record. Business, technology, cities, history and the news. The method and the look are the constant, not the subject.
 
-**Pitch:** the invisible systems behind the places you go and the things you buy.
+**Pitch:** how the world really works, one case at a time.
 
-**Audience:** curious adults 20 to 45, not business specialists. Anyone who has been to a Costco, a gas station or an airport.
+**Audience:** curious adults 20 to 45, not business specialists. Anyone who has been to a Costco, a gas station or an airport, or has seen a headline and wondered what it really means.
 
 **Sub-formats to rotate:**
 
@@ -36,27 +36,35 @@ The plan: one YouTube channel explaining the hidden economics of everyday things
 | What happens when | Follow one event as it ripples outward | What Happens When a Small Town Hospital Closes |
 | Industry secrets | Hidden worlds most people never think about | The Secret World of Shipping Containers |
 | Under the hood (occasional) | Tech systems explained with engineering authority | What Actually Happens When You Tap Your Card |
+| Rise and fall | How a company, product, place or idea took off or fell apart | How Blockbuster Went From 9,000 Stores to One |
+| Big decisions | One choice by a company, city or government, and everything it set off | The Highway That Split a City in Two |
+| In the news | A current event explained: who gains, who loses, what usually happens next | What Happens to a Company When Its Founder CEO Leaves |
 
-**Channel name.** Not chosen yet. Candidates so far:
+**Channel name: Everyday Case Study** (chosen November 18, 2026). Broad enough for every sub-format above, and it says what the videos are: a case study of something ordinary. On November 18 the YouTube handle @EverydayCaseStudy, everydaycasestudy.com and everydaycasestudy.co were all free; the TikTok and Instagram handles are confirmed at signup.
 
-- Short and punchy: Spillover, Knock-On, Markup, Undercount, Tollbooth
-- Curious: Follow the Dollar, Why It Costs That, Who Pays For This, The Hidden Bill
-- Show-style: The Receipt, Exit Ramp Economics, Small Town Big Money
-- Ruled out: Second Order, Ripple Economics
+**About text** (YouTube Studio, Customization, Basic info, Description):
 
-Before committing, confirm the YouTube handle, a .com and the TikTok and Instagram handles are all free.
+> What happens to a town when its Walmart leaves? Why do some companies, cities and ideas take off while others fall apart?
+>
+> Everyday Case Study takes one real story and breaks it down until it makes sense: what happened, why it happened, who it affected, and what it shows about how the world works. Business, technology, cities, history, the news: each video is a case study built from the record, with the sources listed in every description.
+>
+> Comment with the story you want us to break down next.
+
+Channel art: `npm run channel-art` renders the profile picture and banner. Thumbnails, titles and descriptions come from `npm run package`.
+
+Earlier candidates, for the record: Spillover, Knock-On, Markup, Undercount, Tollbooth, Follow the Dollar, Why It Costs That, Who Pays For This, The Hidden Bill, The Receipt, Exit Ramp Economics, Small Town Big Money, Field Case Study (most of their YouTube handles turned out to be taken). Ruled out: Second Order, Ripple Economics.
 
 ## Account Setup
 
 Use a dedicated Gmail for the channel, run the channel as a Brand Account, and lock security down on day one.
 
-- [ ] Pick the channel name and check handle, domain and social availability
+- [x] Pick the channel name: Everyday Case Study (YouTube handle and .com free on Nov 18, 2026)
 - [ ] Create a new Gmail just for the channel
 - [ ] Turn on 2-step verification with an authenticator app or security key (not SMS)
 - [ ] Create the YouTube channel as a Brand Account under that Gmail
 - [ ] Add your personal Gmail as an owner so you can switch in without logging out
 - [ ] Sign up for a Pexels API key, ElevenLabs, Canva and socials with the channel Gmail
-- [ ] Grab matching TikTok and Instagram handles for Shorts reposts
+- [ ] Claim @EverydayCaseStudy on YouTube, and grab everydaycasestudy on TikTok and Instagram for Shorts reposts
 - [ ] Link to your existing AdSense account once eligible (AdSense is per person, not per channel; only one allowed)
 - [ ] Use personal devices and accounts only
 - [ ] Later: custom domain email via Google Workspace once sponsors reach out

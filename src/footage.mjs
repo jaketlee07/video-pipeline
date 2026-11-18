@@ -46,7 +46,7 @@ const MIN_TAG_SCORE = 0.5;
 const SCENES_PER_CALL = 8;
 // A clip can be slowed to fill a slightly longer scene.
 const MIN_LENGTH_SHARE = 0.75;
-const SYSTEM = "You choose footage for a faceless YouTube channel about the hidden economics of everyday things.";
+const SYSTEM = "You choose footage for a faceless YouTube channel of case studies on how the world really works.";
 
 const Picks = z.object({
   picks: z.array(

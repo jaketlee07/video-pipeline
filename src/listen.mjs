@@ -284,7 +284,7 @@ export async function checkNarration(video, dir) {
       label: "narration check",
       effort: "medium",
       maxTokens: 16000,
-      system: "You proof-listen narration for a faceless YouTube channel about the hidden economics of everyday things.",
+      system: "You proof-listen narration for a faceless YouTube channel of case studies on how the world really works.",
       user: prompt("listen", { title: video.title, count: String(found.length), differences: listing }),
       format: betaZodOutputFormat(Verdicts),
     });

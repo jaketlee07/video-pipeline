@@ -127,7 +127,7 @@ export async function prepareAerials(video, dir, scenes) {
     label: "aerial zooms",
     effort: "medium",
     maxTokens: 8000,
-    system: "You plan aerial shots for a faceless YouTube channel about the hidden economics of everyday things.",
+    system: "You plan aerial shots for a faceless YouTube channel of case studies on how the world really works.",
     user: prompt("aerial", { title: video.title, scenes: listing }),
     format: betaZodOutputFormat(Plan),
   });

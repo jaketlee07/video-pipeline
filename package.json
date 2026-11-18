@@ -18,7 +18,9 @@
     "n8n:logs": "docker compose logs -f n8n",
     "listen": "node src/listen.mjs",
     "music": "node src/render.mjs --music",
-    "music:library": "node src/music-library.mjs"
+    "music:library": "node src/music-library.mjs",
+    "channel-art": "node src/channel-art.mjs",
+    "package": "node src/package.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.136.0",
