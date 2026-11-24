@@ -1,19 +1,22 @@
 // Packaging: what a viewer sees before clicking, and the description under the
-// video. Claude writes five title options, three thumbnail ideas (a few big words
-// over a real photo or aerial view from the video, which it sees) and the story
+// video. Claude writes five title options, three thumbnail ideas (a headline naming
+// the subject over one or two bright, real photos or aerial views from the video,
+// which it sees, with a number tag or a receipt as the callout) and the story
 // paragraphs, chapter names and tags. The thumbnails are rendered in the videos'
 // look (remotion/stills/Thumbnail.jsx), and the description gets chapters from the
 // narration's timing, the sources from the brief and the credits from footage.json.
 //
-//   npm run package -- walmart                 write it all, about $0.10 of Claude
+//   npm run package -- walmart                 write it all, about $0.12 of Claude
 //   npm run package -- walmart --keep-words    after editing package.json by hand
-//                                              (the words, or a thumbnail's "file",
+//                                              (the words, or a picture's "file",
 //                                              from its "backgrounds" list): re-render
 //                                              the thumbnails and rebuild the
 //                                              description, without Claude
 //
-// Everything goes to media/<slug>/package/; files from an earlier run move to
-// package/earlier/ rather than being replaced.
+// Everything for the upload ends up in media/<slug>/package/: upload.txt (every
+// field YouTube Studio asks for, in its order, with the text to paste), the video
+// and captions (linked from render/, not copied) and the thumbnails. Files from an
+// earlier run move to package/earlier/ rather than being replaced.
 import { execFileSync } from "node:child_process";
 import { existsSync, linkSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -46,22 +49,45 @@ const CIRCLE_RADIUS = 190;
 // Real photos a thumbnail can use without a share-alike or no-derivatives license
 // attaching to it. Stock photos aren't of the real place, so they're left out.
 const FREE_TO_ADAPT = /^(public domain|cc0|cc by [\d.]+)$/i;
-// How much a photo may be enlarged past filling the frame, to move its subject
-// clear of the words.
-const MAX_ZOOM = 1.5;
+// How much a photo is enlarged past filling the frame (or its half of it), to
+// bring its subject closer, and at most, to move the subject clear of the words;
+// and how far past its own pixels it may be blown up.
+const ZOOM = 1.4;
+const MAX_ZOOM = 1.9;
+const MAX_UPSCALE = 1.25;
 const NEEDS_CREDIT = (license) => license && !/^(public domain|cc0|pixabay)/i.test(license);
 
+const Picture = z.object({
+  image: z.number().int().describe("Background image number"),
+  subject: z
+    .object({ x: z.number(), y: z.number() })
+    .describe("For a photo: where its subject is, as fractions of its width and height from the top left (0.5, 0.5 is the middle)"),
+  label: z
+    .object({
+      big: z.string().describe("A number or one or two words, at most 8 characters: '33%+', '<1%', 'BANKRUPT'"),
+      small: z.string().describe("What it is, at most 26 characters: 'of the city's sales tax'"),
+      tone: z.enum(["amber", "red", "light"]).describe("amber for the number that matters, red for a loss, light for the plain side of a contrast"),
+    })
+    .nullable()
+    .describe("A tag on this picture, or null"),
+});
 const Package = z.object({
   titles: z.array(z.object({ title: z.string(), why: z.string() })),
   thumbnails: z.array(
     z.object({
-      lines: z.array(z.string()).describe("One to three short lines"),
-      accent: z.string().describe("The one word to color"),
-      image: z.number().int().describe("Background image number"),
-      side: z.enum(["left", "right"]).describe("Where the words go"),
-      subject: z
-        .object({ x: z.number(), y: z.number() })
-        .describe("For a photo: where its subject is, as fractions of its width and height from the top left (0.5, 0.5 is the middle)"),
+      kicker: z.string().describe("A few small words above the headline, or empty"),
+      headline: z.string().describe("Two to four words naming what the video is about, at most 22 characters"),
+      accent: z.string().describe("The one headline word to color"),
+      pictures: z.array(Picture).describe("One picture filling the frame, or two side by side"),
+      receipt: z
+        .object({
+          title: z.string().describe("What the receipt is, at most 16 characters: 'City sales tax'"),
+          item: z.string().describe("The circled line's item, at most 10 characters"),
+          value: z.string().describe("Its value, at most 8 characters"),
+          stamp: z.string().describe("An optional stamp across it, one word, or empty"),
+        })
+        .nullable()
+        .describe("With one picture only: a receipt with one line circled, or null"),
       why: z.string(),
     }),
   ),
@@ -109,33 +135,87 @@ function siteRadius(pick, level) {
   return [Math.max(40, ((x1 - x0) / 2 / level.mpp) * 1.3), Math.max(30, ((y1 - y0) / 2 / level.mpp) * 1.3)];
 }
 
-// Where the background sits on the 1280×720 thumbnail: its subject (a photo's, as
-// Claude placed it, or an aerial view's site) on the far side from the words, as
-// far as the picture reaches.
-function placement(bg, side, subject) {
-  const [W, H] = [1280, 720];
-  const want = [side === "left" ? W * 0.7 : W * 0.3, H * 0.5];
+// Where a background sits on the 1280×720 thumbnail: covering `box` ([x, y, w, h]),
+// with its subject (a photo's, as Claude placed it, or an aerial view's site) as
+// near `want` as the picture reaches.
+function placement(bg, box, want, subject, radius = CIRCLE_RADIUS) {
+  const [bx, by, bw, bh] = box;
+  const fitted = (w, h, focus, scale) => {
+    const left = Math.min(bx, Math.max(bx + bw - w * scale, want[0] - focus[0] * scale));
+    const top = Math.min(by, Math.max(by + bh - h * scale, want[1] - focus[1] * scale));
+    return [left + focus[0] * scale, top + focus[1] * scale];
+  };
   if (bg.kind === "photo") {
     const { width: w, height: h } = bg;
     const sx = Math.min(0.95, Math.max(0.05, subject?.x ?? 0.5));
     const sy = Math.min(0.95, Math.max(0.05, subject?.y ?? 0.5));
-    const cover = Math.max(W / w, H / h);
+    const cover = Math.max(bw / w, bh / h);
     // Big enough for the subject to reach its spot with no gap at the edges.
-    const needed = Math.max(want[0] / (sx * w), (W - want[0]) / ((1 - sx) * w), want[1] / (sy * h), (H - want[1]) / ((1 - sy) * h));
-    const scale = Math.min(cover * MAX_ZOOM, Math.max(cover, needed));
+    const needed = Math.max((want[0] - bx) / (sx * w), (bx + bw - want[0]) / ((1 - sx) * w), (want[1] - by) / (sy * h), (by + bh - want[1]) / ((1 - sy) * h));
+    // Closer than the photo was taken, so its subject reads at a glance, but not
+    // blown up much past its own pixels.
+    const scale = Math.max(cover, Math.min(cover * MAX_ZOOM, MAX_UPSCALE, Math.max(cover * ZOOM, needed)));
     const focus = [sx * w, sy * h];
-    const left = Math.min(0, Math.max(W - w * scale, want[0] - focus[0] * scale));
-    const top = Math.min(0, Math.max(H - h * scale, want[1] - focus[1] * scale));
-    return { focus, at: [left + focus[0] * scale, top + focus[1] * scale], scale, circle: null };
+    return { focus, at: fitted(w, h, focus, scale), scale, circle: null };
   }
   const { level, pick } = bg;
   const [rx, ry] = siteRadius(pick, level);
   const site = [level.width / 2 + (pick.box[0] + pick.box[2]) / 2 / level.mpp, level.height / 2 - (pick.box[1] + pick.box[3]) / 2 / level.mpp];
-  const scale = Math.max(CIRCLE_RADIUS / rx, W / level.width, H / level.height);
-  const left = Math.min(0, Math.max(W - level.width * scale, want[0] - site[0] * scale));
-  const top = Math.min(0, Math.max(H - level.height * scale, want[1] - site[1] * scale));
-  return { focus: site, at: [left + site[0] * scale, top + site[1] * scale], scale, circle: [rx, ry] };
+  const scale = Math.max(radius / rx, bw / level.width, bh / level.height);
+  return { focus: site, at: fitted(level.width, level.height, site, scale), scale, circle: [rx, ry] };
 }
+
+// The thumbnail's layout. One picture fills the frame, its subject on the side
+// away from the callout (a label or a receipt); two split it, each labelled. The
+// headline takes the top, and the bottom-right corner, where YouTube shows the
+// video's length, is kept clear.
+// How far the split between two pictures leans, as in remotion/stills/Thumbnail.jsx.
+const LEAN = 70;
+function layout(t, images) {
+  const [W, H] = [1280, 720];
+  const bgOf = (p) => images.find((b) => b.file === p.file);
+  const image = (p, box, want, radius) => {
+    const bg = bgOf(p);
+    return { src: bg.file, width: bg.width, height: bg.height, ...placement(bg, box, want, p.subject, radius) };
+  };
+  if (t.pictures.length >= 2) {
+    const [a, b] = t.pictures;
+    const half = W / 2 + LEAN / 2;
+    return {
+      kicker: t.kicker,
+      headline: t.headline,
+      accent: t.accent,
+      receipt: null,
+      panels: [
+        { clip: "left", image: image(a, [0, 0, half, H], [W * 0.25, H * 0.45], 120), label: a.label && { ...a.label, at: [W * 0.25, 470], width: 520 } },
+        { clip: "right", image: image(b, [W - half, 0, half, H], [W * 0.75, H * 0.45], 120), label: b.label && { ...b.label, at: [W * 0.74, 470], width: 500 } },
+      ],
+    };
+  }
+  const [p] = t.pictures;
+  const callout = Boolean(p.label || t.receipt);
+  // The callout goes on the side away from the subject.
+  const subjectLeft = (p.subject?.x ?? 0.5) <= 0.5 || bgOf(p).kind === "aerial";
+  const calloutX = subjectLeft ? W * 0.74 : W * 0.26;
+  const want = [callout ? (subjectLeft ? W * 0.32 : W * 0.68) : W * 0.5, H * 0.58];
+  return {
+    kicker: t.kicker,
+    headline: t.headline,
+    accent: t.accent,
+    panels: [{ clip: "full", image: image(p, [0, 0, W, H], want), label: p.label && !t.receipt ? { ...p.label, at: [calloutX, 340], width: 520 } : null }],
+    receipt: t.receipt && { ...t.receipt, at: [calloutX, 440] },
+  };
+}
+
+// The words on a thumbnail, for the summary and the upload sheet.
+const thumbnailWords = (t) =>
+  [
+    [t.kicker, t.headline].filter(Boolean).join(" "),
+    ...t.pictures.filter((p) => p.label).map((p) => `${p.label.big} ${p.label.small}`),
+    t.receipt && `receipt: ${t.receipt.item} ${t.receipt.value}`,
+  ]
+    .filter(Boolean)
+    .join(" / ");
 
 // The brief's Sources list: [{ text, url }], minus notes after the link.
 function sourcesOf(brief) {
@@ -208,8 +288,13 @@ async function main() {
     if (!existsSync(wordsPath)) throw new Error(`There's no package/package.json to keep yet. Run npm run package -- "${query ?? video.title}" first.`);
     words = JSON.parse(readFileSync(wordsPath, "utf8"));
     for (const t of words.thumbnails ?? []) {
-      if (t.file && !images.some((b) => b.file === t.file)) {
-        throw new Error(`package.json: a thumbnail uses ${t.file}, which isn't one of the backgrounds listed there.`);
+      if (!t.headline || !t.pictures?.length) {
+        throw new Error("package.json has thumbnails in the old layout (lines over one picture). Run without --keep-words to write new ones.");
+      }
+      for (const p of t.pictures) {
+        if (p.file && !images.some((b) => b.file === p.file)) {
+          throw new Error(`package.json: a thumbnail uses ${p.file}, which isn't one of the backgrounds listed there.`);
+        }
       }
     }
     console.log(`Rebuilding the package for "${video.title}" from package.json...`);
@@ -228,7 +313,13 @@ async function main() {
   }
   // Each thumbnail's picture by file, and the pictures it could use instead, so
   // package.json can be edited by hand.
-  for (const t of words.thumbnails) t.file ??= (images[t.image - 1] ?? images[0]).file;
+  for (const t of words.thumbnails) {
+    t.pictures = t.pictures.slice(0, 2);
+    // A receipt needs the frame to itself.
+    if (t.pictures.length > 1) t.receipt = null;
+    if (t.receipt && !t.receipt.stamp) delete t.receipt.stamp;
+    for (const p of t.pictures) p.file ??= (images[p.image - 1] ?? images[0]).file;
+  }
   words.backgrounds = images.map((b) => ({ file: b.file, about: b.about }));
   writeFileSync(wordsPath, `${JSON.stringify(words, null, 2)}\n`);
 
@@ -238,16 +329,15 @@ async function main() {
   rmSync(publicDir, { recursive: true, force: true });
   mkdirSync(join(publicDir, "footage"), { recursive: true });
   const used = [];
-  for (const t of words.thumbnails) {
-    const bg = images.find((b) => b.file === t.file);
+  for (const p of words.thumbnails.flatMap((t) => t.pictures)) {
+    const bg = images.find((b) => b.file === p.file);
     if (!existsSync(join(publicDir, bg.file))) linkSync(join(dir, bg.file), join(publicDir, bg.file));
     used.push(bg);
   }
   const serveUrl = await bundle({ entryPoint: ENTRY, publicDir });
   const thumbnails = [];
   for (const [i, t] of words.thumbnails.entries()) {
-    const bg = used[i];
-    const props = { image: { src: bg.file, width: bg.width, height: bg.height, ...placement(bg, t.side, t.subject) }, lines: t.lines, accent: t.accent, side: t.side };
+    const props = layout(t, images);
     const composition = await selectComposition({ serveUrl, id: "Thumbnail", inputProps: props });
     const file = join(out, `thumbnail-${i + 1}.jpg`);
     keepEarlier(file);
@@ -255,7 +345,8 @@ async function main() {
       await renderStill({ serveUrl, composition, inputProps: props, output: file, imageFormat: "jpeg", jpegQuality: quality });
       if (statSync(file).size <= THUMBNAIL_BYTES) break;
     }
-    thumbnails.push({ file: `thumbnail-${i + 1}.jpg`, words: t.lines.join(" / "), background: bg.about.split(";")[0] });
+    const pictures = t.pictures.map((p) => images.find((b) => b.file === p.file).about.split(";")[0]);
+    thumbnails.push({ file: `thumbnail-${i + 1}.jpg`, words: thumbnailWords(t), background: pictures.join(" | ") });
   }
   rmSync(publicDir, { recursive: true, force: true });
 
@@ -274,33 +365,75 @@ async function main() {
   const sources = sourcesOf(brief);
   const chapters = chapterList(parts, words.chapters);
   const description = describe(words, chapters, credits, sources, onScreen);
-  for (const name of ["description.txt", "sources.txt", "pinned-comment.txt"]) keepEarlier(join(out, name));
-  writeFileSync(join(out, "description.txt"), `${description.text}\n`);
+  for (const name of ["upload.txt", "sources.txt", "description.txt", "pinned-comment.txt"]) keepEarlier(join(out, name));
   writeFileSync(join(out, "sources.txt"), `${sources.map((s) => `${s.text}: ${s.url}`).join("\n")}\n`);
 
   // The pinned comment, as edited on the Notion page.
   let pinned = null;
   try {
-    pinned = pageSection(await getMarkdown(video.id), "Pinned comment");
-    if (pinned) writeFileSync(join(out, "pinned-comment.txt"), `${unescapeMarkdown(pinned).replace(/^>\s?/gm, "").trim()}\n`);
+    const section = pageSection(await getMarkdown(video.id), "Pinned comment");
+    if (section) pinned = unescapeMarkdown(section).replace(/^>\s?/gm, "").trim();
   } catch (err) {
     console.log(`  (Couldn't read the pinned comment from Notion: ${err.message})`);
   }
 
+  // The video and captions, linked in (not copied) so everything for the upload
+  // is in this one folder.
+  const linked = [];
+  for (const [from, to] of [
+    [join(dir, "render", `${video.slug}.mp4`), "video.mp4"],
+    [join(dir, "render", `${video.slug}.srt`), "captions.srt"],
+  ]) {
+    rmSync(join(out, to), { force: true });
+    if (!existsSync(from)) continue;
+    linkSync(from, join(out, to));
+    linked.push(to);
+  }
+  // The video's own length, end screen included.
+  const probe = (file) => Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));
+  const length = linked.includes("video.mp4") ? clock(probe(join(out, "video.mp4"))) : null;
+  const sheet = uploadSheet({ video, words, thumbnails, description: description.text, pinned, length, captions: linked.includes("captions.srt") });
+  writeFileSync(join(out, "upload.txt"), sheet);
+
   const long = words.titles.filter((t) => t.title.length > 70);
   console.log(`
-Done. In media/${video.slug}/package/:
-  Titles (pick one; Claude's first choice first):
+Done. Everything for the upload is in media/${video.slug}/package/, listed in upload.txt:
+  Titles (Claude's first choice first):
 ${words.titles.map((t, i) => `    ${i + 1}. ${t.title} (${t.title.length})`).join("\n")}${long.length ? "\n    Over 70 characters gets cut off in search results." : ""}
   Thumbnails:
 ${thumbnails.map((t) => `    ${t.file}: ${t.words} (${t.background})`).join("\n")}
-  description.txt: ${description.text.length.toLocaleString("en-US")} of 5,000 characters, ${chapters.length} chapters, ${credits.length} credits, ${description.included} of ${sources.length} sources${
+  Description: ${description.text.length.toLocaleString("en-US")} of 5,000 characters, ${chapters.length} chapters, ${credits.length} credits, ${description.included} of ${sources.length} sources${
     description.left ? ` (all ${sources.length} are in sources.txt)` : ""
-  }
-  Tags: ${words.tags.join(", ")}${pinned ? "\n  pinned-comment.txt: to post and pin as the first comment" : ""}
+  }${length ? "" : "\n  No render yet: run npm run render, then this again to add the video and captions."}${pinned ? "" : "\n  No pinned comment on the Notion page."}
   To change the words or a background, edit package.json and run with --keep-words.
   Claude cost: about $${totalSpent().toFixed(2)}
-  Open: open media/${video.slug}/package/`);
+  Open: open media/${video.slug}/package/upload.txt`);
+}
+
+// Every field YouTube Studio asks for, in its order, with the text to paste.
+function uploadSheet({ video, words, thumbnails, description, pinned, length, captions }) {
+  const rule = "-".repeat(60);
+  const block = (text) => [rule, text, rule].join("\n");
+  const steps = [
+    ["VIDEO", length ? `Upload video.mp4 (${length}, in this folder). Leave it Private until step 11.` : "Not rendered yet: run npm run render, then npm run package again."],
+    ["TITLE (pick one; the first is Claude's choice)", words.titles.map((t) => t.title).join("\n")],
+    ["DESCRIPTION (paste everything between the lines)", block(description)],
+    ["THUMBNAIL (pick one)", thumbnails.map((t) => `${t.file}: ${t.words.toUpperCase()}`).join("\n")],
+    ["AUDIENCE", "No, it's not made for kids."],
+    ["ALTERED CONTENT", "Yes. The background music is composed by AI (ElevenLabs Music)."],
+    ["TAGS (under Show more; paste as one line)", words.tags.join(", ")],
+    ["LANGUAGE AND CATEGORY (under Show more)", "Video language: English\nCaption certification: This content has never aired on television in the U.S.\nCategory: Education"],
+    ["SUBTITLES (Video elements)", captions ? "Add, English, Upload file, With timing: captions.srt" : "No captions yet: they come with the render."],
+    ["END SCREEN (Video elements)", "Add a Subscribe element, and a video once the channel has another. The last 12 seconds are left clear for them."],
+    ["CHECKS, THEN PUBLISH", 'Wait until Copyright and Ad suitability both say "No issues found", then set visibility to Public (or schedule it).'],
+    ["PINNED COMMENT (post as the first comment, then pin it)", pinned ? block(pinned) : "None on the Notion page."],
+    ["AFTERWARDS", "Set the video's Status in Notion to Published."],
+  ];
+  return `${[
+    `UPLOAD: ${video.title}`,
+    "Everything YouTube Studio asks for, in its order. The files named here are in this folder.",
+    ...steps.map(([heading, body], i) => `${i + 1}. ${heading}\n${body}`),
+  ].join("\n\n")}\n`;
 }
 
 main().catch((err) => {
