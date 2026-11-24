@@ -3,6 +3,9 @@ Research this video.
 Title: {{title}}
 Sub-format: {{subFormat}}
 
+Notes on the idea, from the row's Notes (a starting point: the angle, the news that prompted it, sources to begin with; check every fact, since news moves, and follow the evidence where it leads):
+{{notes}}
+
 Use web search to build a research brief. Jake should be able to fact-check it in about an hour, and a script will be written from it. Look for the surprising, concrete material that makes the video worth watching: real numbers, named places and companies, dated events, studies and what they found, and the mechanism that connects them. Find at least one specific real case the video can follow, such as a named town, store or company. Find the history too: how things got this way, in dated steps, and the people, companies and funds whose decisions drove it. Also find the non-obvious conclusion the evidence actually supports, which becomes the video's twist.
 
 The video puts its evidence on screen, so look for primary documents worth showing: court records, company filings and announcements, deeds, laws, studies and local news reports, and the exact words in them that matter.

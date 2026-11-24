@@ -77,7 +77,7 @@ async function main() {
   const markdown = await getMarkdown(video.id);
   const sections = pageSections(markdown);
   const section = (name) => sections.find((s) => s.name?.toLowerCase() === name)?.body ?? "";
-  const vars = { title: video.title, subFormat: video.subFormat ?? "not set; pick the best fit" };
+  const vars = { title: video.title, subFormat: video.subFormat ?? "not set; pick the best fit", notes: video.notes?.trim() || "none" };
   const system = prompt("channel");
   let brief;
   let briefOnPage;

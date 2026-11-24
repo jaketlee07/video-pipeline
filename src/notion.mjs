@@ -59,6 +59,7 @@ function readVideo(page) {
     slug: slugify(title),
     status: props.Status?.select?.name ?? null,
     subFormat: props["Sub-format"]?.select?.name ?? null,
+    notes: plain(props.Notes?.rich_text),
   };
 }
 

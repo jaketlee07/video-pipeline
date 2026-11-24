@@ -426,8 +426,8 @@ function uploadSheet({ video, words, thumbnails, description, pinned, length, ca
     ["SUBTITLES (Video elements)", captions ? "Add, English, Upload file, With timing: captions.srt" : "No captions yet: they come with the render."],
     ["END SCREEN (Video elements)", "Add a Subscribe element, and a video once the channel has another. The last 12 seconds are left clear for them."],
     ["CHECKS, THEN PUBLISH", 'Wait until Copyright and Ad suitability both say "No issues found", then set visibility to Public (or schedule it).'],
-    ["PINNED COMMENT (post as the first comment, then pin it)", pinned ? block(pinned) : "None on the Notion page."],
-    ["AFTERWARDS", "Set the video's Status in Notion to Published."],
+    ["PINNED COMMENT (once the video is public: post it as the first comment, then pin it; a scheduled video takes no comments until then)", pinned ? block(pinned) : "None on the Notion page."],
+    ["AFTERWARDS", "Set the video's Status in Notion to Scheduled (or Published), with the YouTube link in Notes."],
   ];
   return `${[
     `UPLOAD: ${video.title}`,
