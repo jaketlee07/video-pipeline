@@ -5,7 +5,7 @@ Title: {{title}}
 The narration below is split into numbered sentences, grouped under their script parts, with each sentence's word count. The narrator reads about 170 words a minute, so 23 to 34 words take 8 to 12 seconds.
 
 Group consecutive sentences into scenes so that:
-- every sentence belongs to exactly one scene, in order, from sentence 1 through sentence {{count}}
+- every sentence belongs to exactly one scene, in order, from sentence {{first}} through sentence {{count}}
 - a new visual appears every 8 to 12 seconds (one long sentence can be its own scene, but never split a sentence)
 - across the whole video, the mix is roughly: 20% evidence and explanation (flow and document), 30% other graphics (chart, number, map and title), 20% stock footage, 15% aerials of real places and 15% real imagery
 - no more than one number scene in every eight, and never two graphics of the same type in a row
@@ -34,4 +34,4 @@ For every scene, also give two or three Pixabay search queries as fallback b-rol
 
 ## The narration
 
-{{sentences}}
+{{earlier}}{{sentences}}

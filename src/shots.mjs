@@ -70,6 +70,26 @@ function stretches(duration, cuts, seconds, most) {
   return Array.from({ length: most }, (_, i) => found[Math.round((i * (found.length - 1)) / (most - 1))]);
 }
 
+// A still's number in its top-left corner, white on a dark box, drawn as
+// seven-segment digits with drawbox: Homebrew's ffmpeg 9 is built without
+// FreeType, so drawtext isn't there.
+const SEGMENTS = ["abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg"];
+function stillNumber(n, [x, y] = [12, 10], [w, h, t] = [15, 26, 4]) {
+  const half = h / 2;
+  const at = { a: [0, 0, w, t], b: [w - t, 0, t, half], c: [w - t, half, t, half], d: [0, h - t, w, t], e: [0, half, t, half], f: [0, 0, t, half], g: [0, half - t / 2, w, t] };
+  const [pad, gap] = [6, 5];
+  const digits = [...String(n)].map(Number);
+  const width = digits.length * w + (digits.length - 1) * gap;
+  const boxes = [`drawbox=x=${x - pad}:y=${y - pad}:w=${width + 2 * pad}:h=${h + 2 * pad}:color=black@0.65:t=fill`];
+  for (const [i, digit] of digits.entries()) {
+    for (const segment of SEGMENTS[digit]) {
+      const [sx, sy, sw, sh] = at[segment];
+      boxes.push(`drawbox=x=${x + i * (w + gap) + sx}:y=${y + sy}:w=${sw}:h=${sh}:color=white:t=fill`);
+    }
+  }
+  return boxes.join(",");
+}
+
 let sheets = 0;
 // { image: base64 JPEG, windows: [{ start, end }] } with still N from window N, or
 // null if the video can't be read or has no stretch long enough. A long film gets
@@ -83,7 +103,7 @@ export async function shotSheet(video, seconds, most = MAX_STILLS) {
   mkdirSync(dir, { recursive: true });
   try {
     for (const [i, w] of windows.entries()) {
-      const label = `drawtext=text='${i + 1}':x=10:y=8:fontsize=34:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=6`;
+      const label = stillNumber(i + 1);
       const fit = "scale=320:180:force_original_aspect_ratio=decrease,pad=320:180:(ow-iw)/2:(oh-ih)/2";
       ffmpeg(["-ss", ((w.start + w.end) / 2).toFixed(2), "-i", p.file, "-frames:v", "1", "-vf", `${fit},${label}`, "-q:v", "4", join(dir, `${String(i + 1).padStart(2, "0")}.jpg`)]);
     }

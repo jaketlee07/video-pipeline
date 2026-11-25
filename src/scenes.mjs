@@ -82,6 +82,15 @@ const Scene = z.object({
 });
 const Plan = z.object({ scenes: z.array(Scene) });
 
+const MAX_PLAN_CALLS = 4;
+
+// What a follow-up call is told about the scenes already planned, so the mix and
+// the map limits hold across the whole video.
+function earlierScenes(plan, from) {
+  const lines = plan.map((s, i) => `${i + 1}. sentences ${s.first}–${s.last}: ${s.type}${s.place ? ` (${s.place})` : ""}`);
+  return `Sentences 1 to ${from - 1} are already planned, as these scenes:\n${lines.join("\n")}\n\nPlan only the sentences below, starting at sentence ${from}, continuing on from those scenes: keep the mix across the whole video, don't repeat the last scene's type, and count the maps above toward each place's limit.\n\n`;
+}
+
 // Quotes shown on screen must appear word for word in the brief. Drops any that
 // don't (the document keeps its heading) and returns those scenes' numbers.
 const comparable = (text) =>
@@ -152,27 +161,46 @@ async function main() {
   const sentences = splitSentences(paragraphs);
   if (!sentences.length) throw new Error("The Script section has no narration.");
 
-  const listing = [];
-  for (const s of sentences) {
-    if (s.part !== sentences[s.id - 2]?.part) listing.push(`\n[${s.part}]`);
-    listing.push(`${s.id} (${s.words} words) ${s.text}`);
-  }
+  // The sentences from `from` on, under their part headings.
+  const listing = (from) => {
+    const lines = [];
+    for (const s of sentences.slice(from - 1)) {
+      if (s.id === from || s.part !== sentences[s.id - 2]?.part) lines.push(`\n[${s.part}]`);
+      lines.push(`${s.id} (${s.words} words) ${s.text}`);
+    }
+    return lines.join("\n").trim();
+  };
   const totalWords = sentences.reduce((sum, s) => sum + s.words, 0);
   console.log(`Planning scenes for "${video.title}" (${sentences.length} sentences, about ${(totalWords / WORDS_PER_SECOND / 60).toFixed(1)} min)...`);
 
+  // A long script can come back planned only part of the way (an 18-minute one
+  // stopped at sentence 60 of 146). The rest is planned in further calls, each
+  // shown the scenes so far, instead of stretching the last scene over it.
   const brief = unescapeMarkdown(pageSection(markdown, "Brief") ?? "(no brief on the page)");
-  const reply = await ask({
-    label: "scenes",
-    system: prompt("channel"),
-    user: prompt("scenes", {
-      title: video.title,
-      count: String(sentences.length),
-      brief,
-      sentences: listing.join("\n").trim(),
-    }),
-    format: betaZodOutputFormat(Plan),
-  });
-  const { scenes, repaired } = fitToSentences(Plan.parse(JSON.parse(reply)).scenes, sentences.length);
+  const plan = [];
+  let from = 1;
+  for (let call = 1; from <= sentences.length; call++) {
+    if (call > MAX_PLAN_CALLS) {
+      throw new Error(`Claude planned scenes only up to sentence ${from - 1} of ${sentences.length} in ${MAX_PLAN_CALLS} tries. Run npm run scenes again.`);
+    }
+    if (call > 1) console.log(`  The plan stopped at sentence ${from - 1}; planning the rest from sentence ${from}...`);
+    const reply = await ask({
+      label: call === 1 ? "scenes" : `scenes from ${from}`,
+      system: prompt("channel"),
+      user: prompt("scenes", {
+        title: video.title,
+        first: String(from),
+        count: String(sentences.length),
+        brief,
+        earlier: plan.length ? earlierScenes(plan, from) : "",
+        sentences: listing(from),
+      }),
+      format: betaZodOutputFormat(Plan),
+    });
+    plan.push(...Plan.parse(JSON.parse(reply)).scenes.filter((s) => s.last >= from));
+    from = Math.max(from - 1, ...plan.map((s) => s.last)) + 1;
+  }
+  const { scenes, repaired } = fitToSentences(plan, sentences.length);
   const unquoted = checkQuotes(scenes, brief);
   const retitled = useSourceTitles(scenes, brief);
 
