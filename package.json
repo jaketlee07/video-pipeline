@@ -20,7 +20,8 @@
     "music": "node src/render.mjs --music",
     "music:library": "node src/music-library.mjs",
     "channel-art": "node src/channel-art.mjs",
-    "package": "node src/package.mjs"
+    "package": "node src/package.mjs",
+    "ideas": "node src/ideas.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.136.0",
@@ -36,5 +37,8 @@
     "topojson-client": "^3.1.0",
     "us-atlas": "^3.0.1",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
   }
 }

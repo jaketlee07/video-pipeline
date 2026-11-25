@@ -79,6 +79,8 @@ function continueShot(source) {
     const closest = Math.min(media.startMpp, media.endMpp);
     return { ...media, intro: false, startMpp: media.endMpp, endMpp: media.endMpp > closest ? media.endMpp * 0.85 : closest * 0.85 };
   }
+  // A before-and-after stays on the after picture.
+  if (media.kind === "change") return { ...media, intro: false };
   if (media.kind !== "video") return media;
   // Past the end of a short clip, start it again from the top.
   media.trimBefore = (media.trimBefore + Math.round(source.frames * media.rate)) % Math.max(1, frameAt(media.duration - 1));
@@ -112,6 +114,10 @@ function srt(words) {
 // How a picked clip or photo plays in a scene of `frames` frames.
 function mediaFor(pick, frames) {
   const seconds = frames / FPS;
+  if (pick.kind === "change") {
+    const { label, sublabel, circle, site, before, after } = pick;
+    return { kind: "change", label, sublabel, circle, site, before: { src: before.file, year: before.year }, after: { src: after.file, year: after.year } };
+  }
   if (pick.kind === "aerial") {
     const { label, sublabel, circle, box, move, startMpp, endMpp } = pick;
     const levels = pick.levels.map((l) => ({ src: l.file, mpp: l.mpp, width: l.width, height: l.height }));
@@ -127,6 +133,14 @@ function mediaFor(pick, frames) {
   const rate = Math.max(0.75, Math.min(1, pick.duration / seconds));
   const trimBefore = pick.duration - seconds > 0.5 ? frameAt(0.5) : 0;
   return { kind: "video", src: pick.file, duration: pick.duration, rate, trimBefore, credit };
+}
+
+// A captured web page for the browser-window scene. A document's page says the
+// date the brief gives the source, when it has one.
+function websiteFor(pick, doc = null) {
+  const { file, url, archived, width, height, box, focus, marks, mark } = pick;
+  const date = doc && /\b(19|20)\d{2}\b/.test(doc.date) && !/^(about|around|current)/i.test(doc.date) ? doc.date : null;
+  return { src: file, url, archived, width, height, focus: focus ?? box ?? null, marks: marks ?? (box ? [box] : []), mark: mark ?? "circle", date };
 }
 
 async function main() {
@@ -151,7 +165,7 @@ async function main() {
   // narration and a photo never sits on screen for half a minute.
   // Otherwise it gets a text card; an aerial without a photo gets a map.
   const hasPick = (s) => s && FOOTAGE_TYPES.includes(s.type) && picks.get(s.id);
-  const unfilled = (s) => FOOTAGE_TYPES.includes(s.type) && !picks.get(s.id);
+  const unfilled = (s) => (FOOTAGE_TYPES.includes(s.type) || s.type === "website") && !picks.get(s.id);
   const span = (...list) => list.reduce((sum, s) => sum + times.get(s.id).end - times.get(s.id).start, 0);
   const holds = new Set(
     plan.scenes
@@ -176,7 +190,11 @@ async function main() {
     const fallbackTitle = { style: "statement", text: s.text ?? s.flow?.title ?? s.place ?? s.part, attribution: null };
     const flow = s.type === "flow" ? cleanFlow(s.flow) : null;
     if (flow) return { ...base, kind: "flow", flow };
+    // A document whose source page was captured, quote and all, shows that page.
+    const page = picks.get(s.id)?.kind === "website" ? picks.get(s.id) : null;
+    if (s.type === "document" && s.document && page) return { ...base, kind: "website", website: websiteFor(page, s.document) };
     if (s.type === "document" && s.document) return { ...base, kind: "document", document: s.document };
+    if (s.type === "website" && page) return { ...base, kind: "website", website: websiteFor(page) };
     if (s.type === "chart" && s.chart) return { ...base, kind: "chart", chart: s.chart };
     if (s.type === "number") return { ...base, kind: "number", number: g.number ?? { headline: s.text ?? "", label: "", count: null } };
     if (g.map) return { ...base, kind: "map", map: g.map };
@@ -229,8 +247,9 @@ Done: the music for "${video.title}" is in media/${video.slug}/music.wav (${musi
   mkdirSync(join(publicDir, "footage"), { recursive: true });
   linkSync(join(dir, timing.audio), join(publicDir, "narration.wav"));
   if (music) linkSync(join(dir, "music.wav"), join(publicDir, "music.wav"));
-  const filesOf = (media) => (media ? [media.src, ...(media.levels ?? []).map((l) => l.src)] : []);
-  for (const file of new Set(scenes.flatMap((s) => [...filesOf(s.media), ...filesOf(s.backdrop)]).filter(Boolean))) {
+  const filesOf = (media) => (media ? [media.src, ...(media.levels ?? []).map((l) => l.src), media.before?.src, media.after?.src] : []);
+  mkdirSync(join(publicDir, "screenshots"), { recursive: true });
+  for (const file of new Set(scenes.flatMap((s) => [...filesOf(s.media), ...filesOf(s.backdrop), s.website?.src]).filter(Boolean))) {
     linkSync(join(dir, file), join(publicDir, file));
   }
   const propsPath = join(renderDir, "props.json");

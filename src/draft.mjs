@@ -114,13 +114,26 @@ async function main() {
 
   let script;
   let pinned;
+  // The five openings the draft wrote, for swapping in at checkpoint 1.
+  let hooks = "";
+  let hookChoice = "";
   if (fromFile) {
     script = demoteHeadings(readFileSync(fromFile, "utf8").trim());
     pinned = section("pinned comment");
+    hooks = section("other hooks");
   } else {
     const reply = await ask({ label: "script", system, user: prompt("script", { ...vars, brief }) });
     script = demoteHeadings(extractTag(reply, "script"));
     pinned = reply.includes("</pinned_comment>") ? extractTag(reply, "pinned_comment") : "";
+    if (reply.includes("</hooks>")) {
+      hookChoice = reply.includes("</hook_choice>") ? extractTag(reply, "hook_choice").trim() : "";
+      const used = hookChoice.split(":")[0].replace(/^#+\s*/, "").trim().toLowerCase();
+      const options = extractTag(reply, "hooks")
+        .trim()
+        .replace(/^#{1,4}\s*(.+)$/gm, (line, name) => `### ${name.trim()}${used && name.trim().toLowerCase() === used ? " (narrated)" : ""}`);
+      const why = hookChoice.includes(":") ? ` ${hookChoice.replace(/^[^:]*:\s*/, "").replace(/\.?$/, ".")}` : "";
+      hooks = [`> Not narrated. The draft wrote five openings and narrates the one marked (narrated).${why} To try another, paste it over the Hook part of the Script.`, options].join("\n\n");
+    }
   }
 
   // The script already on the page becomes an earlier draft.
@@ -135,7 +148,7 @@ async function main() {
   writeFileSync(draftPath, `${script}\n`);
 
   // Any other sections on the page (earlier drafts, your own notes) stay as they are.
-  const ours = new Set(["brief", "script", "pinned comment"]);
+  const ours = new Set(["brief", "script", "pinned comment", "other hooks"]);
   const others = sections.filter((s) => s.name !== null && !ours.has(s.name.toLowerCase())).map((s) => `## ${s.name}\n\n${s.body}`);
   const preamble = sections.find((s) => s.name === null)?.body;
   await setMarkdown(
@@ -148,6 +161,7 @@ async function main() {
       checkpointNote(draftNumber, draftNumber > 1),
       script,
       ...(pinned ? ["## Pinned comment", pinned] : []),
+      ...(hooks ? ["## Other hooks", hooks] : []),
       ...others,
       ...(keepOld ? [earlierSection(archived, oldScript, section("pinned comment"), writtenOn)] : []),
     ].join("\n\n"),
@@ -172,6 +186,7 @@ async function main() {
   console.log(`
 Done: "${video.title}" is now Script Ready.
   Script: draft ${draftNumber}, ${words.toLocaleString("en-US")} words, about ${minutes.toFixed(1)} minutes
+  Hook: ${hookChoice || "one opening (no alternatives written)"}${hooks ? ", the others are under Other hooks" : ""}
   Question for viewers: ${viewerQuestion ? viewerQuestion.text : "none found; add one on the page if you want it"}
   Pinned comment: ${pinned ? "after the script" : "none written; add one on the page if you want it"}
   Earlier script: ${keepOld ? `kept at the bottom of the page as "Earlier script, draft ${archived}", edits and all` : "none"}

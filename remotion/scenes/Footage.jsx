@@ -2,6 +2,7 @@ import { Video } from "@remotion/media";
 import { AbsoluteFill, Img, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { colors, fonts } from "../theme.js";
 import { Aerial } from "./Aerial.jsx";
+import { Change } from "./Change.jsx";
 
 // Directions for the slow drift, picked by scene so consecutive photos move differently.
 const DRIFTS = [
@@ -11,10 +12,12 @@ const DRIFTS = [
   [-0.6, -1],
 ];
 
-// A stock clip, a photo with a slow pan and zoom, or an aerial zoom onto a real
-// place, filling the frame. `dim` darkens it for big words or a number on top.
+// A stock clip, a photo with a slow pan and zoom, an aerial zoom onto a real
+// place, or a site from above before and after, filling the frame. `dim`
+// darkens it for big words or a number on top.
 export function Footage({ media, seed, dim = false }) {
   if (media.kind === "aerial") return <Aerial media={media} dim={dim} />;
+  if (media.kind === "change") return <Change media={media} dim={dim} />;
   return <Shot media={media} seed={seed} dim={dim} />;
 }
 

@@ -55,6 +55,29 @@ const checks = {
     return `key works (${json.totalHits} highway clips)`;
   },
 
+  async Coverr() {
+    // Optional: more stock video. The free plan allows 50 requests an hour.
+    if (!env.COVERR_API_KEY) throw new Skipped("optional, skipped (a free key at coverr.co → Profile → API adds more stock video)");
+    const { res, json } = await request("https://api.coverr.co/videos?query=highway&page_size=1", { headers: { "x-api-key": env.COVERR_API_KEY } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: key copied wrong?`);
+    return `key works (${json.total} highway clips)`;
+  },
+
+  async YouTube() {
+    // Optional: public video stats and comments. Free; 10,000 quota units a day.
+    if (!env.YOUTUBE_API_KEY) throw new Skipped("optional, skipped (a free YouTube Data API v3 key reads public video stats)");
+    const key = encodeURIComponent(env.YOUTUBE_API_KEY);
+    const { res, json } = await request(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=7OGH3LJJbaU&key=${key}`);
+    if (!res.ok) {
+      const reason = json?.error?.errors?.[0]?.reason ?? json?.error?.details?.[0]?.reason;
+      if (/accessNotConfigured|SERVICE_DISABLED/.test(reason)) throw new Error("key works, but YouTube Data API v3 isn't enabled in its project");
+      if (/API_KEY|keyInvalid|badRequest/i.test(reason ?? "") || res.status === 400) throw new Error(`HTTP ${res.status}: key copied wrong?`);
+      throw new Error(`HTTP ${res.status}: ${reason ?? "request refused"}`);
+    }
+    const views = json.items?.[0]?.statistics?.viewCount;
+    return views ? `key works (the Walmart video has ${Number(views).toLocaleString("en-US")} views)` : "key works";
+  },
+
   async ElevenLabs() {
     need("ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID");
     const voiceId = encodeURIComponent(env.ELEVENLABS_VOICE_ID);

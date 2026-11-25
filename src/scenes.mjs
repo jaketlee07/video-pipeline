@@ -21,7 +21,7 @@ const query = args.filter((a) => a !== "--force").join(" ") || undefined;
 const Scene = z.object({
   first: z.number().int().describe("Number of the first sentence in this scene"),
   last: z.number().int().describe("Number of the last sentence in this scene"),
-  type: z.enum(["stock", "flow", "document", "chart", "number", "map", "aerial", "title", "image"]),
+  type: z.enum(["stock", "flow", "document", "website", "chart", "number", "map", "aerial", "title", "image"]),
   visual: z.string().describe("What's on screen, in one sentence"),
   search: z.array(z.string()).describe("Two or three Pixabay video queries for fallback b-roll"),
   text: z.string().nullable().describe("On-screen words for number and title scenes, otherwise null"),
@@ -79,6 +79,21 @@ const Scene = z.object({
     })
     .nullable()
     .describe("For document scenes only, otherwise null"),
+  change: z
+    .object({
+      before: z.number().int().describe("The last year before the change: the year before work started, or before it closed or emptied"),
+      after: z.number().int().nullable().describe("A year after the change, or null for the latest photos"),
+    })
+    .nullable()
+    .describe("For aerial scenes about what got built, torn down or emptied at the site, otherwise null"),
+  website: z
+    .object({
+      url: z.string().describe("The page: a company's homepage like 'https://www.amazon.com/', or a link from the brief's Sources"),
+      date: z.string().nullable().describe("YYYY-MM-DD to show the page as it looked that day, for a story in the past; null for how it looks today"),
+      highlight: z.string().nullable().describe("A few words that appear on that page to circle, or null"),
+    })
+    .nullable()
+    .describe("For website scenes only, otherwise null"),
 });
 const Plan = z.object({ scenes: z.array(Scene) });
 
@@ -245,8 +260,8 @@ async function main() {
 
   console.log(`
 Done: ${planned.length} scenes, about ${(totalSeconds / planned.length).toFixed(1)} seconds each.
-  Screen time: flows and documents ${share(["flow", "document"])}%, other graphics ${share(["chart", "number", "map", "title"])}%, stock ${share(["stock"])}%, aerial ${share(["aerial"])}%, real imagery ${share(["image"])}%
-  Flows: ${count("flow")}, documents: ${count("document")}, charts: ${count("chart")}, numbers: ${count("number")}, maps and aerials: ${count("map") + count("aerial")}${
+  Screen time: flows, documents and web pages ${share(["flow", "document", "website"])}%, other graphics ${share(["chart", "number", "map", "title"])}%, stock ${share(["stock"])}%, aerial ${share(["aerial"])}%, real imagery ${share(["image"])}%
+  Flows: ${count("flow")}, documents: ${count("document")}, web pages: ${count("website")}, charts: ${count("chart")}, numbers: ${count("number")}, maps and aerials: ${count("map") + count("aerial")} (${planned.filter((s) => s.change).length} before and after)${
     long.length ? `\n  Longer than 15 seconds: scenes ${long.map((s) => s.id).join(", ")}` : ""
   }${repaired ? `\n  Fixed ${repaired} scene boundaries so every sentence is covered once.` : ""}${
     unquoted.length ? `\n  Dropped quotes not found word for word in the brief: scenes ${unquoted.join(", ")}` : ""

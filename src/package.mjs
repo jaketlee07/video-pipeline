@@ -104,13 +104,26 @@ function small(path) {
 }
 
 // Photos and aerial views from the video that a thumbnail can use, each with what
-// the narration says over it.
+// the narration says over it. A site from above before and after comes first, as
+// two images in a row, since side by side they make the strongest contrast.
 function backgrounds(plan, footage) {
   const narration = new Map(plan.scenes.map((s) => [s.id, s.narration]));
   const seen = new Set();
+  const pairs = [];
   const found = [];
   for (const { id, pick } of footage.scenes) {
     if (!pick) continue;
+    if (pick.kind === "change") {
+      if (seen.has(pick.before.file)) continue;
+      seen.add(pick.before.file);
+      const site = [pick.label, pick.sublabel].filter(Boolean).join(", ");
+      const shot = (s, about) => ({ kind: "change", file: s.file, width: pick.width, height: pick.height, pick, scene: id, about });
+      pairs.push(
+        shot(pick.before, `aerial photo of ${site} in ${pick.before.year}, BEFORE (the next image is the same view in ${pick.after.year}), the site circled`),
+        shot(pick.after, `aerial photo of ${site} in ${pick.after.year}, AFTER (the image before is the same view in ${pick.before.year}), the site circled`),
+      );
+      continue;
+    }
     if (pick.kind === "photo" && pick.source !== "Pixabay" && FREE_TO_ADAPT.test(pick.license ?? "")) {
       if (seen.has(pick.id)) continue;
       seen.add(pick.id);
@@ -125,7 +138,7 @@ function backgrounds(plan, footage) {
       found.push({ kind: "aerial", file: level.file, width: level.width, height: level.height, level, pick, scene: id, about: `aerial view of ${[pick.label, pick.sublabel].filter(Boolean).join(", ")}, the site circled` });
     }
   }
-  return found.slice(0, MAX_IMAGES).map((b) => ({ ...b, about: `${b.about}; in the video under: "${narration.get(b.scene)?.slice(0, 160) ?? ""}"` }));
+  return [...pairs, ...found].slice(0, MAX_IMAGES).map((b) => ({ ...b, about: `${b.about}; in the video under: "${narration.get(b.scene)?.slice(0, 160) ?? ""}"` }));
 }
 
 // The site's radius on an aerial image, in its pixels (as remotion/scenes/Aerial.jsx
@@ -157,6 +170,14 @@ function placement(bg, box, want, subject, radius = CIRCLE_RADIUS) {
     const scale = Math.max(cover, Math.min(cover * MAX_ZOOM, MAX_UPSCALE, Math.max(cover * ZOOM, needed)));
     const focus = [sx * w, sy * h];
     return { focus, at: fitted(w, h, focus, scale), scale, circle: null };
+  }
+  if (bg.kind === "change") {
+    // The site's outline is kept as shares of the picture (src/naip.mjs).
+    const { x0, x1, y0, y1 } = bg.pick.site;
+    const site = [((x0 + x1) / 2) * bg.width, ((y0 + y1) / 2) * bg.height];
+    const circle = [Math.max(40, ((x1 - x0) / 2) * bg.width * 1.2), Math.max(30, ((y1 - y0) / 2) * bg.height * 1.2)];
+    const scale = Math.max(radius / circle[0], bw / bg.width, bh / bg.height);
+    return { focus: site, at: fitted(bg.width, bg.height, site, scale), scale, circle };
   }
   const { level, pick } = bg;
   const [rx, ry] = siteRadius(pick, level);
@@ -195,7 +216,7 @@ function layout(t, images) {
   const [p] = t.pictures;
   const callout = Boolean(p.label || t.receipt);
   // The callout goes on the side away from the subject.
-  const subjectLeft = (p.subject?.x ?? 0.5) <= 0.5 || bgOf(p).kind === "aerial";
+  const subjectLeft = (p.subject?.x ?? 0.5) <= 0.5 || ["aerial", "change"].includes(bgOf(p).kind);
   const calloutX = subjectLeft ? W * 0.74 : W * 0.26;
   const want = [callout ? (subjectLeft ? W * 0.32 : W * 0.68) : W * 0.5, H * 0.58];
   return {
@@ -307,8 +328,14 @@ async function main() {
       content.push({ type: "text", text: `Image ${i + 1}: ${bg.about}` });
       content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: small(join(dir, bg.file)) } });
     }
-    const reply = await ask({ label: "package", effort: "medium", maxTokens: 16000, system: SYSTEM, user: content, format: betaZodOutputFormat(Package) });
-    words = Package.parse(JSON.parse(reply));
+    // A reply now and then stops short (one thumbnail, no description); it's asked again once.
+    for (let tries = 1; ; tries++) {
+      const reply = await ask({ label: "package", effort: "medium", maxTokens: 16000, system: SYSTEM, user: content, format: betaZodOutputFormat(Package) });
+      words = Package.parse(JSON.parse(reply));
+      const whole = words.thumbnails.length >= 3 && words.description.length && words.chapters.length && words.titles.length >= 5;
+      if (whole || tries === 2) break;
+      console.log("  The reply stopped short; asking again...");
+    }
     keepEarlier(wordsPath);
   }
   // Each thumbnail's picture by file, and the pictures it could use instead, so
@@ -358,6 +385,7 @@ async function main() {
   }
   const credits = [...credited.values()];
   if (footage.scenes.some((e) => e.pick?.kind === "aerial")) credits.push("Aerial imagery: USDA NAIP, via USGS The National Map (public domain)");
+  if (footage.scenes.some((e) => e.pick?.kind === "change")) credits.push("Before-and-after aerial photos: USDA NAIP, via Microsoft Planetary Computer (public domain)");
 
   // Sources a document card shows on screen go first, so viewers can find them.
   const headings = plan.scenes.filter((s) => s.document).map((s) => s.document.heading.toLowerCase());

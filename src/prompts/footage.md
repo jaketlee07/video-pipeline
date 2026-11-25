@@ -4,7 +4,8 @@ Each scene below says what should be on screen, the narration it plays under and
 - It shows what the scene describes, or something close enough that a viewer won't notice the difference.
 - A photo of the actual place, store, company or person the narration names beats generic footage. When candidates fit equally well, prefer video, since it moves.
 - It never passes off a different place or business as the one named. A photo titled with another town or store is fine only if the narration is general, not about that specific one.
-- For a stock scene, which shows something ordinary rather than a named place, a video clip that fits beats a photo, since the video needs movement; take a photo only when no clip fits. A photo of some other town's store is not "the actual place".
+- When the narration is about a company, a real photo that shows it (its logo, sign, vans, trucks, packages or buildings) beats unbranded footage of the same kind of thing, even in a stock scene: a viewer should see who the story is about.
+- Otherwise, for a stock scene, which shows something ordinary rather than a named place, a video clip that fits beats a photo, since the video needs movement; take a photo only when no clip fits. A photo of some other town's store is not "the actual place".
 - For an aerial scene, pick a photograph of the real place named, or nothing. A map, plan, census sheet or other scanned document is not a photograph of the place.
 - It fits the place in the story. When the narration is about an American town, avoid footage that's plainly from somewhere else, such as European streets, foreign signage or cars driving on the left.
 - It doesn't contradict the narration: no identifiable store or brand other than the one being named, no readable text that says something else, and nothing upbeat under a grim line.

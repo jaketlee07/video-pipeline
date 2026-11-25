@@ -17,7 +17,7 @@ Curious adults aged 20 to 45, mostly in the US, who aren't business specialists.
 
 ## Where the channel stands out
 
-Bigger channels already explain whole industries (how pizzerias make money, why buffets disappeared). This channel's edge is the ground-level view: one real town, store, company or decision, and what the economics did to the people it touched (residents, workers, suppliers, shareholders). When a topic could be told either way, tell it through named places, people and documents. For a story in the news, the documents are the evidence: filings, statements, court records.
+Bigger channels already explain whole industries (how pizzerias make money, why buffets disappeared). This channel's edge is the ground-level view: one real town, store, company or decision, and what the economics did to the people it touched (residents, workers, suppliers, shareholders). When a topic could be told either way, tell it through named places, people and documents. Pitch broad, prove specific: the title and thumbnail ask a question anyone can care about (what happens to a town when its Walmart leaves?), and the video answers it through one real case. A small town's name belongs inside the video, not in the title. For a story in the news, the documents are the evidence: filings, statements, court records.
 
 ## Standards
 

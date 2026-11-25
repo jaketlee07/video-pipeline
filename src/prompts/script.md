@@ -13,13 +13,15 @@ Let the brief decide the length. The narrator reads about 170 words a minute. A 
 
 Tell it as a story, not a list of facts.
 
-1. Hook (at most about 30 seconds, roughly 85 words): prove the title's promise within the first two sentences, and put the story's biggest stake in the hook rather than saving it (if a city went bankrupt, say so here). End on that stake or on the question the video answers, never on an expectation nobody really holds. No greeting, no channel intro, no "in this video". Pick the opening that fits the brief best:
+1. Hook (at most about 30 seconds, roughly 85 words): prove the title's promise within the first two sentences, and put the story's biggest stake in the hook rather than saving it (if a city went bankrupt, say so here). End on that stake or on the question the video answers, never on an expectation nobody really holds. No greeting, no channel intro, no "in this video". Most viewers who leave do it here, so before writing the script, write five different hooks, one with each of these openings:
    - a scene: one real place on a date, told in concrete detail ("On January 28, 2016, the Walmart in Fairfield, Alabama locked its doors for the last time.")
    - someone in a real place: what an ordinary person there runs into, step by step
    - the thing that should have happened but didn't: state the obvious expectation, then that reality went the other way
    - a number with a twist: a surprising statistic, then the short sentence that reframes it
    - a golden age: how good it was, in sensory detail, before the turn
-2. Setup (up to about 1:30): why this matters to the viewer personally, and the video's argument in one plain sentence. Say it as part of the story, never announce it ("here's the argument of this video"), and don't list the places or chapters coming up.
+
+   Then pick the one a viewer who just clicked would be least able to leave: it proves the title's promise within two sentences, the stake is concrete and felt, it leaves a question the viewer needs answered, and every fact in it is in the brief. The script's Hook is that one, smoothed to flow into the setup.
+2. Setup (up to about 1:30): why this matters to the viewer personally, including why this one case answers the broader question in the title, and the video's argument in one plain sentence. Say it as part of the story, never announce it ("here's the argument of this video"), and don't list the places or chapters coming up.
 3. How the money works: early on, walk through who pays whom with one concrete example from the brief's money flows, step by step, so a diagram can follow along.
 4. Four to six chapters that move forward in time or through the event, each built around named people, companies or places and a turn where something changes. Follow one main case through the video, with two or three others for contrast; a place mentioned once in passing confuses more than it adds. Save the main case's biggest turn for the second half. Each lands one reveal backed by a number, a real case, or a quote from the brief's Quotes and documents. Open each chapter with a fresh question or an unresolved thread that pulls the viewer forward ("But the store closing wasn't what nearly bankrupted the city."), and pay it off before the chapter ends.
 5. Takeaway: the non-obvious conclusion.
@@ -68,6 +70,8 @@ The script should be complete and ready to read as it stands. Give it an editori
 Pick the question in this video that viewers are most likely to argue about: a judgment call the evidence leaves open, with good arguments on both sides, that the takeaway doesn't settle. Once the evidence for it has been laid out, have the narrator put it to viewers in one or two sentences and ask them to say what they think in the comments, without answering it or leaning it toward one side. Ask only once in the script.
 
 ## Format
+
+First, inside <hooks> tags, the five hooks, each under a "### " heading naming its opening (like "### A scene"), written as narration ready to read. Then, inside <hook_choice> tags, the heading of the one you picked, a colon, and one sentence on why it beats the others.
 
 Inside <script> tags, write markdown. Give each part a ### heading: ### Hook, ### Setup, a short name for each chapter (the money explainer counts as one), ### Takeaway and ### Tease. Under each heading, write the narration as plain paragraphs, with no bullet points, bold or links. Keep paragraphs to two to five sentences.
 

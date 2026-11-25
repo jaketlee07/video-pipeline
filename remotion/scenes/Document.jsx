@@ -25,7 +25,7 @@ function domain(url) {
 }
 
 // The desk the papers lie on: dark slate with a faint cutting-mat grid and grain.
-function Desk({ children }) {
+export function Desk({ children }) {
   return (
     <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 40%, #1E2A40 0%, ${colors.background} 80%)` }}>
       <AbsoluteFill

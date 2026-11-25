@@ -12,6 +12,11 @@
 // A place the video comes back to gets a different move each time: the first visit
 // flies down onto it, the second starts close and pulls back out, and later ones
 // drift in slowly from close up.
+//
+// A scene whose site was built, torn down or emptied (scenes.json's `change`)
+// shows the site from above the year before and the year after instead, wiping
+// from one to the other (src/naip.mjs); if the site isn't on the map or wasn't
+// photographed in those years, it gets the zoom.
 import { createHash } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +25,7 @@ import { z } from "zod";
 import { ask, prompt } from "./claude.mjs";
 import { USER_AGENT } from "./commons.mjs";
 import { geocode } from "./geocode.mjs";
+import { beforeAfter } from "./naip.mjs";
 
 const EXPORT = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export";
 const FRAME_W = 1920;
@@ -121,7 +127,15 @@ export async function prepareAerials(video, dir, scenes) {
   if (!scenes.length) return result;
   console.log(`Planning aerial zooms for ${scenes.length} scenes...`);
   const listing = scenes
-    .map((s) => [`## Scene ${s.id}`, `Place: ${s.place ?? "not given"}`, `On screen: ${s.visual}`, `Narration: ${s.narration}`].join("\n"))
+    .map((s) =>
+      [
+        `## Scene ${s.id}`,
+        `Place: ${s.place ?? "not given"}`,
+        `On screen: ${s.visual}`,
+        ...(s.change ? [`Shows the site before and after: ${s.change.before} and ${s.change.after ?? "today"}`] : []),
+        `Narration: ${s.narration}`,
+      ].join("\n"),
+    )
     .join("\n\n");
   const reply = await ask({
     label: "aerial zooms",
@@ -150,13 +164,38 @@ export async function prepareAerials(video, dir, scenes) {
     const place = `${label}|${plan.place.label}`;
     const visit = visits.get(place) ?? 0;
     visits.set(place, visit + 1);
+    const about = `${label}${site ? `, ${plan.place.label}` : ""}`;
+    if (scene.change && site) {
+      const shots = await beforeAfter(dir, scene.id, site, scene.change).catch((err) => ({ error: err.message }));
+      if (!shots.error) {
+        console.log(`  Scene ${scene.id}: ${label} in ${shots.before.year} and ${shots.after.year}`);
+        result.set(scene.id, {
+          id: `naip-${scene.id}`,
+          source: "Microsoft Planetary Computer",
+          kind: "change",
+          about: `Aerial photos of ${about} in ${shots.before.year} and ${shots.after.year}`,
+          title: "NAIP aerial imagery",
+          author: "USDA NAIP, via Microsoft Planetary Computer",
+          license: "Public domain",
+          pageURL: "https://planetarycomputer.microsoft.com/dataset/naip",
+          label,
+          sublabel: plan.place.label,
+          circle: !/^highway\//.test(site.kind),
+          ...shots,
+        });
+        continue;
+      }
+      console.log(`  Scene ${scene.id}: no before and after of ${label}: ${shots.error}. It gets the zoom instead.`);
+    } else if (scene.change) {
+      console.log(`  Scene ${scene.id}: no before and after without the site on the map; it gets the zoom instead.`);
+    }
     const camera = revisit(cameraFor(site ?? town, Boolean(site)), visit);
     const levels = await fetchLevels(dir, scene.id, camera);
     result.set(scene.id, {
       id: `usgs-${scene.id}`,
       source: "USGS The National Map",
       kind: "aerial",
-      about: `Aerial imagery zooming onto ${label}${site ? `, ${plan.place.label}` : ""}`,
+      about: `Aerial imagery zooming onto ${about}`,
       title: "Aerial imagery",
       author: "USDA NAIP, via USGS The National Map",
       license: "Public domain",

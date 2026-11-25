@@ -8,6 +8,7 @@ import { Flow } from "./scenes/Flow.jsx";
 import { Footage } from "./scenes/Footage.jsx";
 import { MapScene } from "./scenes/MapScene.jsx";
 import { TitleCard } from "./scenes/TitleCard.jsx";
+import { Website } from "./scenes/Website.jsx";
 import { colors } from "./theme.js";
 
 function Scene({ scene }) {
@@ -18,6 +19,8 @@ function Scene({ scene }) {
       return <Flow flow={scene.flow} />;
     case "document":
       return <Document document={scene.document} />;
+    case "website":
+      return <Website website={scene.website} />;
     case "chart":
       return <Chart chart={scene.chart} />;
     case "number":
